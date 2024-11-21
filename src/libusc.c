@@ -11,7 +11,7 @@
 #include <string.h>
 
 typedef struct {
-    unsigned flag;
+    unsigned long flag;
     const char* str;
 } libusc_flag_str_t;
 
@@ -143,7 +143,7 @@ static void _print_flags(const char* const name, const unsigned optflags, const 
         fprintf(stderr, "(none)");
     fprintf(stderr, "\n");
 
-    int test = optflags;
+    unsigned test = optflags;
     test &= ~flags[0].flag;
     if (test != 0)
         fprintf(stderr, "libusb: unknown termios %s 0o%o\n", name, test);
@@ -226,11 +226,11 @@ usc_serial_t* usc_serial_open(const char* const devpath)
     options.c_cflag |= CS8;
 
     fprintf(stderr,
-            "libusb: debug termios config: c_iflag 0o%o, c_oflag 0o%o, c_lflag 0o%o, c_cflag 0o%o\n",
-            options.c_iflag,
-            options.c_oflag,
-            options.c_lflag,
-            options.c_cflag);
+            "libusb: debug termios config: c_iflag 0o%lo, c_oflag 0o%lo, c_lflag 0o%lo, c_cflag 0o%lo\n",
+            (unsigned long)options.c_iflag,
+            (unsigned long)options.c_oflag,
+            (unsigned long)options.c_lflag,
+            (unsigned long)options.c_cflag);
 
     // do not modify input
     options.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | INPCK | ISTRIP | INLCR | IGNCR | ICRNL | IUCLC | IXON | IXANY | IXOFF | IMAXBEL | IUTF8);

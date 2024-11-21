@@ -2,9 +2,6 @@ name: build
 
 on: [push, pull_request]
 
-env:
-  DEBIAN_FRONTEND: noninteractive
-
 jobs:
   build:
     strategy:
@@ -19,5 +16,8 @@ jobs:
       - name: build
         shell: bash
         run: |
+          if [ "${{ matrix.os }}" != "windows-latest" ]; then
+            export CFLAGS="-Wall -Wextra -Werror"
+          fi
           cmake -S . -B build
           cmake --build build -j
