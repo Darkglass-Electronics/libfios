@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
             DEBUG_PRINT("writing command for %d | 0x%x bytes\n", r, r);
 
             // encode write command as first byte, followed by expected size, and then the payload
-            snprintf(cmd, CMD_SIZE, "w 0x%04x ", r);
+            snprintf(cmd, CMD_SIZE, "w 0x%04x", r);
 
             test = usc_serial_write_cmd(s, cmd);
             assert(test);

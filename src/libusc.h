@@ -18,7 +18,7 @@ typedef struct {
    #endif
 } usc_serial_t;
 
-#define CMD_SIZE 2 /* 'w ' */ + 6 /* 0xffff */ + 1 /* ' ' */ + 1 /* null */
+#define CMD_SIZE 2 /* 'w ' */ + 10 /* 0xffffffff */ + 1 /* ' ' */ + 1 /* null */
 #define MAX_PAYLOAD_SIZE 0x2000
 
 usc_serial_t* usc_serial_open(const char* devpath);

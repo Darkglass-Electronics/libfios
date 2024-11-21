@@ -15,14 +15,15 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN TRUE)
 set_property(GLOBAL PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 # building interface library
-add_library(libusc INTERFACE)
+add_library(libusc-interface INTERFACE)
+add_library(libusc::interface ALIAS libusc-interface)
 
-target_include_directories(libusc
+target_include_directories(libusc-interface
   INTERFACE
     src
 )
 
-target_sources(libusc
+target_sources(libusc-interface
   INTERFACE
     src/libusc.c
 )
@@ -30,6 +31,20 @@ target_sources(libusc
 # building standalone tools (if we are building this project alone)
 if(PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
 
+  # building shared library
+  add_library(libusc SHARED)
+
+  target_include_directories(libusc
+    PRIVATE
+      src
+  )
+
+  target_sources(libusc
+    PRIVATE
+      src/libusc.c
+  )
+
+  # building utility executable
   add_executable(usc-file)
 
   target_include_directories(usc-file
@@ -39,16 +54,13 @@ if(PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
 
   target_link_libraries(usc-file
     PRIVATE
-      libusc
+      libusc-interface
   )
 
   target_sources(usc-file
     PRIVATE
-      src/libusc.c
       src/usc-file.c
   )
-
-else()
 
 endif()
 
