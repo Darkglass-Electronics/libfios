@@ -1,5 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Filipe Coelho <falktx@darkglass.com>
+// SPDX-License-Identifier: ISC
 
-#include "api.h"
+#include "libusc.h"
 
 #undef NDEBUG
 #define DEBUG
@@ -30,6 +32,22 @@ typedef struct {
 #ifndef _WIN32
 
 #define STR(s) #s
+
+#ifndef IUCLC
+#define IUCLC 0001000
+#endif
+
+#ifndef OLCUC
+#define OLCUC 0000002
+#endif
+
+#ifndef XCASE
+#define XCASE 0000004
+#endif
+
+#ifndef CMSPAR
+#define CMSPAR 010000000000
+#endif
 
 #define LIBUSC_SUPPORTED_TERMIOS_IFLAGS (IGNBRK|BRKINT|IGNPAR|PARMRK|INPCK|ISTRIP|INLCR|IGNCR|ICRNL|IUCLC|IXON|IXANY|IXOFF|IUTF8)
 static const libusc_flag_str_t k_termios_iflags[] = {
@@ -63,6 +81,7 @@ static const libusc_flag_str_t k_termios_oflags[] = {
     { OFILL, STR(OFILL) },   /* Use fill characters for delay.  */
     { OFDEL, STR(OFDEL) },   /* Fill is DEL.  */
 };
+
 
 #define LIBUSC_SUPPORTED_TERMIOS_LFLAGS (ISIG|ICANON|XCASE|ECHO|ECHOE|ECHOK|ECHONL|NOFLSH|TOSTOP|ECHOCTL|ECHOPRT|ECHOKE|FLUSHO|IEXTEN|EXTPROC)
 static const libusc_flag_str_t k_termios_lflags[] = {
@@ -99,8 +118,6 @@ static const libusc_flag_str_t k_termios_cflags[] = {
     { PARODD, STR(PARODD) },
     { HUPCL, STR(HUPCL) },
     { CLOCAL, STR(CLOCAL) },
-    
-    
     { CMSPAR, STR(CMSPAR) },
     { CRTSCTS, STR(CRTSCTS) },
 };
@@ -146,51 +163,53 @@ usc_serial_t* usc_serial_open(const char* const devpath)
     if (h == NULL || h == INVALID_HANDLE_VALUE)
         goto error_free;
 
-//     DCB params = { 0 };
-//     params.DCBlength = sizeof(params);
+    DCB params = { 0 };
+    params.DCBlength = sizeof(params);
 
-//     BOOL ret;
-//     ret = GetCommState(hCom, &params);
-//     assert(ret != FALSE);
-//  
-//     params.BaudRate = CBR_115200;
-//     params.fBinary = TRUE;
-//     params.fParity = FALSE;
-//     params.fOutxCtsFlow = FALSE;
-//     params.fOutxDsrFlow = FALSE;
-//     params.fDtrControl = DTR_CONTROL_DISABLE;
-//     params.fDsrSensitivity = FALSE;
-//     params.fTXContinueOnXoff = FALSE;
-//     params.fOutX = FALSE;
-//     params.fInX = FALSE;
-//     params.fErrorChar = FALSE;
-//     params.fNull = FALSE;
-//     params.fRtsControl = RTS_CONTROL_DISABLE;
-//     params.fAbortOnError = FALSE;
-//     params.XonLim = 0;
-//     params.XoffLim = 0;
-//     params.ByteSize = 8;
-//     params.Parity = NOPARITY;
-//     params.StopBits = ONESTOPBIT;
-//     params.XonChar = 0;
-//     params.XoffChar = 0;
-//     params.ErrorChar = 0;
-//     params.EofChar = 0;
-//     params.EvtChar = 0;
-// 
-//     ret = SetCommState(hCom, &params);
-//     assert(ret != FALSE);
-// 
-//     COMMTIMEOUTS timeouts = { 0 };
-// 
-//     ret = SetCommTimeouts(hCom, &timeouts);
-//     assert(ret != FALSE);
-// 
-//     ret = PurgeComm(hCom, PURGE_RXCLEAR);
-//     assert(ret != FALSE);
-// 
-//     ret = PurgeComm(hCom, PURGE_TXCLEAR);
-//     assert(ret != FALSE);
+    BOOL ret;
+    ret = GetCommState(h, &params);
+    assert(ret != FALSE);
+
+    params.BaudRate = CBR_115200;
+    params.fBinary = TRUE;
+    params.fParity = FALSE;
+    params.fOutxCtsFlow = FALSE;
+    params.fOutxDsrFlow = FALSE;
+    params.fDtrControl = DTR_CONTROL_DISABLE;
+    params.fDsrSensitivity = FALSE;
+    params.fTXContinueOnXoff = FALSE;
+    params.fOutX = FALSE;
+    params.fInX = FALSE;
+    params.fErrorChar = FALSE;
+    params.fNull = FALSE;
+    params.fRtsControl = RTS_CONTROL_DISABLE;
+    params.fAbortOnError = FALSE;
+    params.XonLim = 0;
+    params.XoffLim = 0;
+    params.ByteSize = 8;
+    params.Parity = NOPARITY;
+    params.StopBits = ONESTOPBIT;
+    params.XonChar = 0;
+    params.XoffChar = 0;
+    params.ErrorChar = 0;
+    params.EofChar = 0;
+    params.EvtChar = 0;
+
+    ret = SetCommState(h, &params);
+    assert(ret != FALSE);
+
+    COMMTIMEOUTS timeouts = { 0 };
+
+    ret = SetCommTimeouts(h, &timeouts);
+    assert(ret != FALSE);
+
+    ret = PurgeComm(h, PURGE_RXCLEAR);
+    assert(ret != FALSE);
+
+    ret = PurgeComm(h, PURGE_TXCLEAR);
+    assert(ret != FALSE);
+
+    s->h = h;
 #else
     const int fd = open(devpath, O_RDWR | O_NOCTTY);
 

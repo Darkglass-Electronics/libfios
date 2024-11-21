@@ -1,0 +1,23 @@
+name: build
+
+on: [push, pull_request]
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: build
+        shell: bash
+        run: |
+          cmake -S . -B build
+          cmake --build build -j

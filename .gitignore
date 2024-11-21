@@ -1,4 +1,3 @@
 *.bin
 *.exe
-/serial-test
-/serial-test-arm64
+/build
