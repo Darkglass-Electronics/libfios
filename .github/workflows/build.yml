@@ -20,4 +20,4 @@ jobs:
             export CFLAGS="-Wall -Wextra -Werror"
           fi
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build -j
+          cmake --build build --config Release -j
