@@ -34,6 +34,11 @@ if(PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
   # building shared library
   add_library(libusc SHARED)
 
+  target_compile_definitions(libusc
+    PRIVATE
+      USC_SHARED_LIBRARY
+  )
+
   target_include_directories(libusc
     PRIVATE
       src
