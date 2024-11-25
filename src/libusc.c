@@ -232,6 +232,12 @@ usc_serial_t* usc_serial_open(const char* const devpath)
         goto error_close;
     }
 
+    if (SetCommMask(h, 0) == FALSE)
+    {
+        fprintf(stderr, "libusb: failed to set serial port mask, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
+        goto error_close;
+    }
+
     if (SetCommTimeouts(h, &timeouts) == FALSE)
     {
         fprintf(stderr, "libusb: failed to get serial port state, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));

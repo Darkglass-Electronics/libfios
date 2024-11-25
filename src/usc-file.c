@@ -36,7 +36,7 @@ int main(int argc, char* argv[])
     if (!strcmp(argv[2], "auto"))
     {
        #if defined(_WIN32)
-        devpath = "COM3";
+        devpath = "COM5";
        #elif defined(__aarch64__)
         devpath = "/dev/ttyGS0";
        #else
@@ -59,7 +59,7 @@ int main(int argc, char* argv[])
     bool test;
     if (sending)
     {
-        FILE* const in = fopen(argv[3], "r");
+        FILE* const in = fopen(argv[3], "rb");
         assert(in);
         fseek(in, 0, SEEK_SET);
 
@@ -97,7 +97,7 @@ int main(int argc, char* argv[])
     }
     else
     {
-        FILE* out = fopen(argv[3], "w");
+        FILE* out = fopen(argv[3], "wb");
         assert(out);
         fseek(out, 0, SEEK_SET);
 
