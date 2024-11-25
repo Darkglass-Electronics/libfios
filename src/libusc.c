@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 typedef struct {
@@ -20,7 +21,6 @@ typedef struct {
 #else
 #include <errno.h>
 #include <fcntl.h>
-#include <stdio.h>
 #include <termios.h>
 #include <unistd.h>
 #endif
@@ -29,7 +29,31 @@ typedef struct {
 // #define DEBUG_PRINT(...) printf(__VA_ARGS__)
 // #include <stdio.h>
 
-#ifndef _WIN32
+#ifdef _WIN32
+
+static const char* GetLastErrorString(const DWORD error)
+{
+    static char* _error = NULL;
+    const char* retstr;
+
+    if (_error != NULL)
+        LocalFree(_error);
+
+    if (FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS,
+                       NULL,
+                       error,
+                       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                       (LPSTR)&_error,
+                       0,
+                       NULL))
+        retstr = _error;
+    else
+        retstr = "Unknown error";
+
+    return retstr;
+}
+
+#else
 
 #define STR(s) #s
 
@@ -161,14 +185,21 @@ usc_serial_t* usc_serial_open(const char* const devpath)
     const HANDLE h = CreateFile(devpath, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
     if (h == NULL || h == INVALID_HANDLE_VALUE)
+    {
+        fprintf(stderr, "libusc: failed to open serial port device '%s', error %d: %s\n", devpath, errno, strerror(errno));
         goto error_free;
+    }
 
     DCB params = { 0 };
     params.DCBlength = sizeof(params);
 
-    BOOL ret;
-    ret = GetCommState(h, &params);
-    assert(ret != FALSE);
+    COMMTIMEOUTS timeouts = { 0 };
+
+    if (GetCommState(h, &params) == FALSE)
+    {
+        fprintf(stderr, "libusb: failed to get serial port state, error %d: %s\n", GetLastError(), strerror(GetLastError()));
+        goto error_close;
+    }
 
     params.BaudRate = CBR_115200;
     params.fBinary = TRUE;
@@ -195,19 +226,29 @@ usc_serial_t* usc_serial_open(const char* const devpath)
     params.EofChar = 0;
     params.EvtChar = 0;
 
-    ret = SetCommState(h, &params);
-    assert(ret != FALSE);
+    if (SetCommState(h, &params) == FALSE)
+    {
+        fprintf(stderr, "libusb: failed to get serial port attributes, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
+        goto error_close;
+    }
 
-    COMMTIMEOUTS timeouts = { 0 };
+    if (SetCommTimeouts(h, &timeouts) == FALSE)
+    {
+        fprintf(stderr, "libusb: failed to get serial port state, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
+        goto error_close;
+    }
 
-    ret = SetCommTimeouts(h, &timeouts);
-    assert(ret != FALSE);
+    if (PurgeComm(h, PURGE_RXCLEAR) == FALSE)
+    {
+        fprintf(stderr, "libusb: failed to purge serial port RX, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
+        goto error_close;
+    }
 
-    ret = PurgeComm(h, PURGE_RXCLEAR);
-    assert(ret != FALSE);
-
-    ret = PurgeComm(h, PURGE_TXCLEAR);
-    assert(ret != FALSE);
+    if (PurgeComm(h, PURGE_TXCLEAR) == FALSE)
+    {
+        fprintf(stderr, "libusb: failed to purge serial port TX, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
+        goto error_close;
+    }
 
     s->h = h;
 #else
@@ -215,7 +256,7 @@ usc_serial_t* usc_serial_open(const char* const devpath)
 
     if (fd < 0)
     {
-        fprintf(stderr, "libusb: failed to open serial port device '%s', error %d: %s\n", devpath, errno, strerror(errno));
+        fprintf(stderr, "libusc: failed to open serial port device '%s', error %d: %s\n", devpath, errno, strerror(errno));
         goto error_free;
     }
 
@@ -264,9 +305,17 @@ usc_serial_t* usc_serial_open(const char* const devpath)
     options.c_cc[VMIN] = 1;
 
     // set speed
-    cfsetspeed(&options, B115200);
+    if (cfsetspeed(&options, B115200) != 0)
+    {
+        fprintf(stderr, "libusb: failed to set serial port speed, error %d: %s\n", errno, strerror(errno));
+        goto error_close;
+    }
 
-    tcsetattr(fd, TCSANOW, &options);
+    if (tcsetattr(fd, TCSANOW, &options) != 0)
+    {
+        fprintf(stderr, "libusb: failed to set serial port attributes, error %d: %s\n", errno, strerror(errno));
+        goto error_close;
+    }
 
     tcflush(fd, TCIFLUSH);
     tcflush(fd, TCOFLUSH);
@@ -276,11 +325,12 @@ usc_serial_t* usc_serial_open(const char* const devpath)
 
     return s;
 
-// error_close:
-//    #ifdef _WIN32
-//    #else
-//     close(fd);
-//    #endif
+error_close:
+   #ifdef _WIN32
+    CloseHandle(h);
+   #else
+    close(fd);
+   #endif
 
 error_free:
     free(s);

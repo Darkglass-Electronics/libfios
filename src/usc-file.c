@@ -49,7 +49,9 @@ int main(int argc, char* argv[])
     }
 
     usc_serial_t* const s = usc_serial_open(devpath);
-    assert(s != NULL);
+
+    if (s == NULL)
+        return 1;
 
     char buf[MAX_PAYLOAD_SIZE];
     char cmd[CMD_SIZE];
