@@ -33,7 +33,7 @@ typedef struct _fios_file_t {
 } fios_file_t;
 
 #ifdef _WIN32
-static __stdcall unsigned _fios_thread_close(fios_file_t* const f)
+static unsigned __stdcall _fios_thread_close(fios_file_t* const f)
 #else
 static void* _fios_thread_close(fios_file_t* const f)
 #endif
@@ -55,7 +55,7 @@ static void* _fios_thread_close(fios_file_t* const f)
 }
 
 #ifdef _WIN32
-static __stdcall unsigned _fios_receive_thread(void* const arg)
+static unsigned __stdcall _fios_receive_thread(void* const arg)
 #else
 static void* _fios_receive_thread(void* const arg)
 #endif
