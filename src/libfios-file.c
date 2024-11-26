@@ -283,9 +283,9 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
     fseek(file, 0, SEEK_END);
     const long size = ftell(file);
 
-    if (size > 0xffffffff)
+    if (size > MAX_FILE_SIZE)
     {
-        fprintf(stderr, "fios: file is too big! must be < 4GiB\n");
+        fprintf(stderr, "fios: file is too big! must be < 2GiB\n");
         goto error_close;
     }
 

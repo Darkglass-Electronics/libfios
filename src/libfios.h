@@ -21,6 +21,7 @@ extern "C" {
 #endif
 
 #define CMD_SIZE 2 /* 'w ' */ + 10 /* 0xffffffff */ + 1 /* null */
+#define MAX_FILE_SIZE 0x7fffffff
 #define MAX_PAYLOAD_SIZE 0x2000
 
 typedef struct _fios_serial_t fios_serial_t;
