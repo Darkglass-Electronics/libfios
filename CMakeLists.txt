@@ -16,38 +16,6 @@ set_property(GLOBAL PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 find_package(Threads REQUIRED)
 
-if(MSVC)
-  include(FetchContent)
-  FetchContent_Declare(pthreads4w
-    GIT_REPOSITORY https://git.code.sf.net/p/pthreads4w/code
-    GIT_TAG f12b445b336ee0117b43fca1d4b9f22c9af82c36
-  )
-  FetchContent_MakeAvailable(pthreads4w)
-
-  add_library(pthreads4w STATIC)
-  add_library(fios::pthreads4w ALIAS pthreads4w)
-
-  target_sources(pthreads4w PRIVATE ${pthreads4w_SOURCE_DIR}/pthread.c)
-  target_compile_definitions(pthreads4w
-    PRIVATE
-      HAVE_CONFIG_H
-      HAVE_STDINT_H=1
-      _POSIX_C_SOURCE=200112L
-    PUBLIC
-      INCLUDE_NP
-      PTW32_DLLPORT
-      __PTW32_STATIC_LIB
-  )
-
-  target_include_directories(pthreads4w
-    PUBLIC
-      ${pthreads4w_SOURCE_DIR}
-  )
-  set(FIOS_PTHREADS fios::pthreads4w)
-else()
-  set(FIOS_PTHREADS ${CMAKE_THREAD_LIBS_INIT})
-endif()
-
 # building interface library
 add_library(libfios-interface INTERFACE)
 add_library(libfios::interface ALIAS libfios-interface)
@@ -59,7 +27,7 @@ target_include_directories(libfios-interface
 
 target_link_libraries(libfios-interface
   INTERFACE
-    ${FIOS_PTHREADS}
+    ${CMAKE_THREAD_LIBS_INIT}
 )
 
 target_sources(libfios-interface
@@ -86,7 +54,7 @@ if(PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
 
   target_link_libraries(libfios
     PRIVATE
-      ${FIOS_PTHREADS}
+      ${CMAKE_THREAD_LIBS_INIT}
   )
 
   target_sources(libfios

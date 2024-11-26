@@ -30,7 +30,7 @@ typedef struct {
 
 #ifdef _WIN32
 
-static const char* GetLastErrorString(const DWORD error)
+const char* GetLastErrorString(const short error)
 {
     static char* _error = NULL;
     const char* retstr;

@@ -7,6 +7,7 @@
 
 #ifdef _WIN32
 typedef void* HANDLE;
+const char* GetLastErrorString(short error);
 #endif
 
 typedef struct _fios_serial_t {
