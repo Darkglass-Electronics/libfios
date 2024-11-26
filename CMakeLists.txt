@@ -76,7 +76,7 @@ if(PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
 
   target_compile_definitions(libfios
     PRIVATE
-      USC_SHARED_LIBRARY
+      FIOS_SHARED_LIBRARY
   )
 
   target_include_directories(libfios

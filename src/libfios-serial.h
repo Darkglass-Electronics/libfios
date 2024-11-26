@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2024 Filipe Coelho <falktx@darkglass.com>
 // SPDX-License-Identifier: ISC
 
+#pragma once
+
 #include "libfios.h"
 
 #ifdef _WIN32
