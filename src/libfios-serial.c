@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 Filipe Coelho <falktx@darkglass.com>
 // SPDX-License-Identifier: ISC
 
-#include "libusc.h"
+#include "libfios-serial.h"
 
 #undef NDEBUG
 #define DEBUG
@@ -11,12 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 
-typedef struct {
-    unsigned long flag;
-    const char* str;
-} libusc_flag_str_t;
-
-#if _WIN32
+#ifdef _WIN32
 #include <windows.h>
 #else
 #include <errno.h>
@@ -25,9 +20,13 @@ typedef struct {
 #include <unistd.h>
 #endif
 
+typedef struct {
+    unsigned long flag;
+    const char* str;
+} fios_flag_str_t;
+
 #define DEBUG_PRINT(...)
 // #define DEBUG_PRINT(...) printf(__VA_ARGS__)
-// #include <stdio.h>
 
 #ifdef _WIN32
 
@@ -74,7 +73,7 @@ static const char* GetLastErrorString(const DWORD error)
 #endif
 
 #define LIBUSC_SUPPORTED_TERMIOS_IFLAGS (IGNBRK|BRKINT|IGNPAR|PARMRK|INPCK|ISTRIP|INLCR|IGNCR|ICRNL|IUCLC|IXON|IXANY|IXOFF|IUTF8)
-static const libusc_flag_str_t k_termios_iflags[] = {
+static const fios_flag_str_t k_termios_iflags[] = {
     { LIBUSC_SUPPORTED_TERMIOS_IFLAGS, "" },
     { IGNBRK, STR(IGNBRK) },   /* Ignore break condition.  */
     { BRKINT, STR(BRKINT) },   /* Signal interrupt on break.  */
@@ -94,7 +93,7 @@ static const libusc_flag_str_t k_termios_iflags[] = {
 };
 
 #define LIBUSC_SUPPORTED_TERMIOS_OFLAGS (OPOST|OLCUC|ONLCR|OCRNL|ONOCR|ONLRET|OFILL|OFDEL)
-static const libusc_flag_str_t k_termios_oflags[] = {
+static const fios_flag_str_t k_termios_oflags[] = {
     { LIBUSC_SUPPORTED_TERMIOS_OFLAGS, "" },
     { OPOST, STR(OPOST) },   /* Post-process output.  */
     { OLCUC, STR(OLCUC) },   /* Map lowercase characters to uppercase on output. (not in POSIX).  */
@@ -108,7 +107,7 @@ static const libusc_flag_str_t k_termios_oflags[] = {
 
 
 #define LIBUSC_SUPPORTED_TERMIOS_LFLAGS (ISIG|ICANON|XCASE|ECHO|ECHOE|ECHOK|ECHONL|NOFLSH|TOSTOP|ECHOCTL|ECHOPRT|ECHOKE|FLUSHO|IEXTEN|EXTPROC)
-static const libusc_flag_str_t k_termios_lflags[] = {
+static const fios_flag_str_t k_termios_lflags[] = {
     { LIBUSC_SUPPORTED_TERMIOS_LFLAGS, "" },
     { ISIG, STR(ISIG) },       /* Enable signals.  */
     { ICANON, STR(ICANON) },   /* Canonical input (erase and kill processing).  */
@@ -131,7 +130,7 @@ static const libusc_flag_str_t k_termios_lflags[] = {
 };
 
 #define LIBUSC_SUPPORTED_TERMIOS_CFLAGS (CSIZE|CSTOPB|CREAD|PARENB|PARODD|HUPCL|CLOCAL|CMSPAR|CRTSCTS)
-static const libusc_flag_str_t k_termios_cflags[] = {
+static const fios_flag_str_t k_termios_cflags[] = {
     { LIBUSC_SUPPORTED_TERMIOS_CFLAGS, "" },
     { CS6, STR(CS6) },
     { CS7, STR(CS7) },
@@ -147,9 +146,9 @@ static const libusc_flag_str_t k_termios_cflags[] = {
 };
 
 #define print_flags(n, o, f) _print_flags(n, o, f, sizeof(f)/sizeof(f[0]))
-static void _print_flags(const char* const name, const unsigned optflags, const libusc_flag_str_t flags[], const unsigned numflags)
+static void _print_flags(const char* const name, const unsigned optflags, const fios_flag_str_t flags[], const unsigned numflags)
 {
-    fprintf(stderr, "libusb: debug termios %s: ", name);
+    fprintf(stderr, "fios: debug termios %s: ", name);
     bool found = false;
     for (unsigned i = 1; i < numflags; ++i)
     {
@@ -170,13 +169,13 @@ static void _print_flags(const char* const name, const unsigned optflags, const 
     unsigned test = optflags;
     test &= ~flags[0].flag;
     if (test != 0)
-        fprintf(stderr, "libusb: unknown termios %s 0o%o\n", name, test);
+        fprintf(stderr, "fios: unknown termios %s 0o%o\n", name, test);
 }
 #endif
 
-usc_serial_t* usc_serial_open(const char* const devpath)
+fios_serial_t* fios_serial_open(const char* const devpath)
 {
-    usc_serial_t* const s = malloc(sizeof(usc_serial_t));
+    fios_serial_t* const s = malloc(sizeof(fios_serial_t));
 
     if (s == NULL)
         return NULL;
@@ -186,7 +185,7 @@ usc_serial_t* usc_serial_open(const char* const devpath)
 
     if (h == NULL || h == INVALID_HANDLE_VALUE)
     {
-        fprintf(stderr, "libusc: failed to open serial port device '%s', error %d: %s\n", devpath, errno, strerror(errno));
+        fprintf(stderr, "fios: failed to open serial port device '%s', error %d: %s\n", devpath, errno, strerror(errno));
         goto error_free;
     }
 
@@ -197,7 +196,7 @@ usc_serial_t* usc_serial_open(const char* const devpath)
 
     if (GetCommState(h, &params) == FALSE)
     {
-        fprintf(stderr, "libusb: failed to get serial port state, error %d: %s\n", GetLastError(), strerror(GetLastError()));
+        fprintf(stderr, "fios: failed to get serial port state, error %d: %s\n", GetLastError(), strerror(GetLastError()));
         goto error_close;
     }
 
@@ -228,41 +227,42 @@ usc_serial_t* usc_serial_open(const char* const devpath)
 
     if (SetCommState(h, &params) == FALSE)
     {
-        fprintf(stderr, "libusb: failed to get serial port attributes, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
+        fprintf(stderr, "fios: failed to get serial port attributes, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
         goto error_close;
     }
 
     if (SetCommMask(h, 0) == FALSE)
     {
-        fprintf(stderr, "libusb: failed to set serial port mask, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
+        fprintf(stderr, "fios: failed to set serial port mask, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
         goto error_close;
     }
 
     if (SetCommTimeouts(h, &timeouts) == FALSE)
     {
-        fprintf(stderr, "libusb: failed to get serial port state, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
+        fprintf(stderr, "fios: failed to get serial port state, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
         goto error_close;
     }
 
     if (PurgeComm(h, PURGE_RXCLEAR) == FALSE)
     {
-        fprintf(stderr, "libusb: failed to purge serial port RX, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
+        fprintf(stderr, "fios: failed to purge serial port RX, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
         goto error_close;
     }
 
     if (PurgeComm(h, PURGE_TXCLEAR) == FALSE)
     {
-        fprintf(stderr, "libusb: failed to purge serial port TX, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
+        fprintf(stderr, "fios: failed to purge serial port TX, error %d: %s\n", GetLastError(), GetLastErrorString(GetLastError()));
         goto error_close;
     }
 
+    s->devpath = _strdup(devpath);
     s->h = h;
 #else
     const int fd = open(devpath, O_RDWR | O_NOCTTY);
 
     if (fd < 0)
     {
-        fprintf(stderr, "libusc: failed to open serial port device '%s', error %d: %s\n", devpath, errno, strerror(errno));
+        fprintf(stderr, "fios: failed to open serial port device '%s', error %d: %s\n", devpath, errno, strerror(errno));
         goto error_free;
     }
 
@@ -273,7 +273,7 @@ usc_serial_t* usc_serial_open(const char* const devpath)
     options.c_cflag |= CS8;
 
     fprintf(stderr,
-            "libusb: debug termios config: c_iflag 0o%lo, c_oflag 0o%lo, c_lflag 0o%lo, c_cflag 0o%lo\n",
+            "fios: debug termios config: c_iflag 0o%lo, c_oflag 0o%lo, c_lflag 0o%lo, c_cflag 0o%lo\n",
             (unsigned long)options.c_iflag,
             (unsigned long)options.c_oflag,
             (unsigned long)options.c_lflag,
@@ -294,6 +294,7 @@ usc_serial_t* usc_serial_open(const char* const devpath)
     print_flags("c_oflag", options.c_oflag, k_termios_oflags);
     print_flags("c_lflag", options.c_lflag, k_termios_lflags);
     print_flags("c_cflag", options.c_cflag, k_termios_cflags);
+    fflush(stdout);
 
 //     cfmakeraw(&options);
 //     options.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON | IXOFF);
@@ -313,19 +314,29 @@ usc_serial_t* usc_serial_open(const char* const devpath)
     // set speed
     if (cfsetspeed(&options, B115200) != 0)
     {
-        fprintf(stderr, "libusb: failed to set serial port speed, error %d: %s\n", errno, strerror(errno));
+        fprintf(stderr, "fios: failed to set serial port speed, error %d: %s\n", errno, strerror(errno));
         goto error_close;
     }
 
     if (tcsetattr(fd, TCSANOW, &options) != 0)
     {
-        fprintf(stderr, "libusb: failed to set serial port attributes, error %d: %s\n", errno, strerror(errno));
+        fprintf(stderr, "fios: failed to set serial port attributes, error %d: %s\n", errno, strerror(errno));
         goto error_close;
     }
 
-    tcflush(fd, TCIFLUSH);
-    tcflush(fd, TCOFLUSH);
+    if (tcflush(fd, TCIFLUSH) != 0)
+    {
+        fprintf(stderr, "fios: failed to flush serial port input, error %d: %s\n", errno, strerror(errno));
+        goto error_close;
+    }
 
+    if (tcflush(fd, TCOFLUSH) != 0)
+    {
+        fprintf(stderr, "fios: failed to flush serial port output, error %d: %s\n", errno, strerror(errno));
+        goto error_close;
+    }
+
+    s->devpath = strdup(devpath);
     s->fd = fd;
 #endif
 
@@ -343,7 +354,7 @@ error_free:
     return NULL;
 }
 
-void usc_serial_close(usc_serial_t* const s)
+void fios_serial_close(fios_serial_t* const s)
 {
     assert(s != NULL);
 
@@ -353,10 +364,11 @@ void usc_serial_close(usc_serial_t* const s)
     close(s->fd);
    #endif
 
+    free(s->devpath);
     free(s);
 }
 
-static bool _usc_read(usc_serial_t* const s, uint8_t* const buffer, const uint32_t size)
+static bool _fios_read(fios_serial_t* const s, uint8_t* const buffer, const uint32_t size)
 {
    #ifdef _WIN32
     for (uint32_t r = 0; r < size;)
@@ -372,7 +384,13 @@ static bool _usc_read(usc_serial_t* const s, uint8_t* const buffer, const uint32
     for (uint32_t r = 0; r < size;)
     {
         const int r2 = read(s->fd, buffer + r, size - r);
-        // printf("_usc_read got %d | %x bytes, total %d | %x bytes, size %u\n", r2, r2, r + r2, r + r2, size);
+        DEBUG_PRINT("_fios_read got %d | %x bytes, total %d | %x bytes, size %u\n", r2, r2, r + r2, r + r2, size);
+
+        if (r2 == 0)
+        {
+            perror("_fios_read read == 0");
+            return false;
+        }
 
         if (r2 < 0)
         {
@@ -382,7 +400,7 @@ static bool _usc_read(usc_serial_t* const s, uint8_t* const buffer, const uint32
                 continue;
             }
 
-            perror("_usc_read read < 0");
+            perror("_fios_read read < 0");
             return false;
         }
 
@@ -394,7 +412,7 @@ static bool _usc_read(usc_serial_t* const s, uint8_t* const buffer, const uint32
     return true;
 }
 
-static bool _usc_write(usc_serial_t* const s, const uint8_t* const buffer, const uint32_t size)
+static bool _fios_write(fios_serial_t* const s, const uint8_t* const buffer, const uint32_t size)
 {
    #ifdef _WIN32
     for (unsigned long w = 0; w < size;)
@@ -410,7 +428,7 @@ static bool _usc_write(usc_serial_t* const s, const uint8_t* const buffer, const
     for (uint32_t w = 0; w < size;)
     {
         const int w2 = write(s->fd, buffer + w, size - w);
-        DEBUG_PRINT("usc_serial_write_cmd got %d | %x bytes, total %d | %x bytes, size %u\n", w2, w2, w + w2, w + w2, size);
+        DEBUG_PRINT("fios_serial_write_cmd got %d | %x bytes, total %d | %x bytes, size %u\n", w2, w2, w + w2, w + w2, size);
 
         if (w2 < 0)
         {
@@ -420,7 +438,7 @@ static bool _usc_write(usc_serial_t* const s, const uint8_t* const buffer, const
                 continue;
             }
 
-            perror("usc_serial_write_cmd write < 0");
+            perror("fios_serial_write_cmd write < 0");
             return false;
         }
 
@@ -432,28 +450,28 @@ static bool _usc_write(usc_serial_t* const s, const uint8_t* const buffer, const
     return true;
 }
 
-bool usc_serial_read_cmd(usc_serial_t* const s, char cmd[CMD_SIZE])
+bool fios_serial_read_cmd(fios_serial_t* const s, char cmd[CMD_SIZE])
 {
     memset(cmd, 0, CMD_SIZE);
 
-    return _usc_read(s, (uint8_t*)cmd, CMD_SIZE);
+    return _fios_read(s, (uint8_t*)cmd, CMD_SIZE);
 }
 
-bool usc_serial_read_payload(usc_serial_t* s, void* payload, size_t size)
+bool fios_serial_read_payload(fios_serial_t* s, void* payload, size_t size)
 {
-    return _usc_read(s, payload, size);
+    return _fios_read(s, payload, size);
 }
 
-bool usc_serial_write_cmd(usc_serial_t* const s, const char* const cmd)
+bool fios_serial_write_cmd(fios_serial_t* const s, const char* const cmd)
 {
     char cmdbuf[CMD_SIZE] = { 0 };
     strncpy(cmdbuf, cmd, CMD_SIZE - 1);
-    DEBUG_PRINT("usc_serial_write_cmd '%s'\n", cmdbuf);
+    DEBUG_PRINT("fios_serial_write_cmd '%s'\n", cmdbuf);
 
-    return _usc_write(s, (const uint8_t*)cmdbuf, CMD_SIZE);
+    return _fios_write(s, (const uint8_t*)cmdbuf, CMD_SIZE);
 }
 
-bool usc_serial_write_payload(usc_serial_t* const s, const void* const payload, const size_t size)
+bool fios_serial_write_payload(fios_serial_t* const s, const void* const payload, const size_t size)
 {
-    return _usc_write(s, payload, size);
+    return _fios_write(s, payload, size);
 }
