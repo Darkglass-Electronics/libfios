@@ -26,8 +26,8 @@ $ ./build/fios-file
 Usage: ./build/fios-file [r|s] [device-path|auto] [file-path]
 ```
 
-The 1st argument is either "r" for "receive" or "s" for "send".
-The 2nd argument specifies the serial port to use (e.g. `/dev/ttyUSB0` on Linux and `COM5` on Windows)
+The 1st argument is either "r" for "receive" or "s" for "send".  
+The 2nd argument specifies the serial port to use (e.g. `/dev/ttyUSB0` on Linux and `COM5` on Windows)  
 The 3rd argument specifies the file to read or write (dependending on the receive vs send mode)
 
 ### Code
