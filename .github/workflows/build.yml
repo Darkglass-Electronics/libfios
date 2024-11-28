@@ -2,6 +2,11 @@ name: build
 
 on: [push, pull_request]
 
+env:
+  LINUX_FLAGS:
+  MACOS_FLAGS: -DMAC_OS_X_VERSION_MAX_ALLOWED=MAC_OS_X_VERSION_10_15 -DMAC_OS_X_VERSION_MIN_REQUIRED=MAC_OS_X_VERSION_10_15 -mmacosx-version-min=10.15 -arch x86_64 -arch arm64
+  WIN64_FLAGS:
+
 jobs:
   build:
     strategy:
@@ -13,20 +18,47 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: build
+      - name: build with cmake
         shell: bash
         run: |
           if [ "${{ matrix.os }}" != "windows-latest" ]; then
             export CFLAGS="-Wall -Wextra -Werror"
           fi
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release -j
+          cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-cmake --config Release -j
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: install node deps
+        shell: bash
+        run: |
+          ./.github/install-deps.sh
+      - name: build node addon
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            export CFLAGS="${{ env.MACOS_FLAGS }}"
+            export CXXFLAGS="${{ env.MACOS_FLAGS }}"
+            export LDFLAGS="${{ env.MACOS_FLAGS }}"
+          elif [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            export CFLAGS="${{ env.LINUX_FLAGS }}"
+            export CXXFLAGS="${{ env.LINUX_FLAGS }}"
+            export LDFLAGS="${{ env.LINUX_FLAGS }}"
+          else
+            export CFLAGS="${{ env.WIN64_FLAGS }}"
+            export CXXFLAGS="${{ env.WIN64_FLAGS }}"
+            export LDFLAGS="${{ env.WIN64_FLAGS }}"
+          fi
+          swig -c++ -javascript -node src/libfios.i
+          $(yarn global bin)/node-gyp configure
+          $(yarn global bin)/node-gyp build
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}
           path: |
-            build/*.dylib
-            build/*.so
-            build/usc-file
-            build/Release/*.dll
-            build/Release/*.exe
+            build-cmake/*.dylib
+            build-cmake/*.so
+            build-cmake/fios-file
+            build-cmake/Release/*.dll
+            build-cmake/Release/*.exe
+            build/Release/fios.node
