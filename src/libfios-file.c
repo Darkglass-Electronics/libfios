@@ -180,7 +180,7 @@ static void* _fios_send_thread(void* const arg)
     {
         const int r = fread(buf, 1, MAX_PAYLOAD_SIZE, f->file);
 
-        DEBUG_PRINT("main file read return %d | 0x%x\n", r, r);
+        DEBUG_PRINT("main file read return %d | 0x%x bytes\n", r, r);
 
         if (r <= 0)
             break;

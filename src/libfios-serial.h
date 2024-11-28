@@ -5,6 +5,10 @@
 
 #include "libfios.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifdef _WIN32
 typedef void* HANDLE;
 const char* GetLastErrorString(short error);
@@ -18,3 +22,7 @@ typedef struct _fios_serial_t {
     int fd;
    #endif
 } fios_serial_t;
+
+#ifdef __cplusplus
+}
+#endif

@@ -287,25 +287,15 @@ fios_serial_t* fios_serial_open(const char* const devpath)
     options.c_oflag &= ~(OPOST | OLCUC | ONLCR | OCRNL | ONLRET | OFILL);
     options.c_oflag |= ONOCR;
 
-    // testing
+    // raw mode
     options.c_lflag &= ~(ISIG | ICANON | ECHO | ECHOE | ECHOK | ECHONL | TOSTOP | ECHOCTL | ECHOPRT | ECHOKE | IEXTEN | EXTPROC);
+    options.c_cflag &= ~(CSTOPB | CRTSCTS | PARENB | PARODD | HUPCL);
 
     print_flags("c_iflag", options.c_iflag, k_termios_iflags);
     print_flags("c_oflag", options.c_oflag, k_termios_oflags);
     print_flags("c_lflag", options.c_lflag, k_termios_lflags);
     print_flags("c_cflag", options.c_cflag, k_termios_cflags);
     fflush(stdout);
-
-//     cfmakeraw(&options);
-//     options.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON | IXOFF);
-//     options.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
-    options.c_cflag &= ~(CSTOPB | CRTSCTS | PARENB | PARODD);
-//     { CSTOPB, STR(CSTOPB) },
-//     { CREAD, STR(CREAD) },
-//     { PARENB, STR(PARENB) },
-//     { PARODD, STR(PARODD) },
-//     { HUPCL, STR(HUPCL) },
-//     { CLOCAL, STR(CLOCAL) },
 
     // no timeout
     options.c_cc[VTIME] = 0;
