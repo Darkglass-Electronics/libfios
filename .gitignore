@@ -1,3 +1,4 @@
 *.bin
 *.exe
-/build
+build/
+libfios_wrap.cxx
