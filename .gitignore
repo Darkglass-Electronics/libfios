@@ -1,4 +1,7 @@
 *.bin
+*.dylib
 *.exe
+*.so
 build/
 libfios_wrap.cxx
+__pycache__/
