@@ -63,6 +63,11 @@ if(PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
       src/libfios-serial.c
   )
 
+  set_target_properties(libfios
+    PROPERTIES
+      PREFIX ""
+  )
+
   # building utility executable
   add_executable(fios-file)
 
