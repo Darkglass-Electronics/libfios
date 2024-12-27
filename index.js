@@ -1,3 +1,8 @@
-const fios = require('./build/Release/fios.node');
+const path = require('path')
 
-export default fios;
+const fios = require(path.resolve(
+  __dirname,
+  path.join(__dirname, 'build/Release/fios.node')
+))
+
+module.exports = {fios}
