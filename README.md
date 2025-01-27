@@ -41,7 +41,7 @@ fios_serial_t* const s = fios_serial_open("/dev/ttyUSB0");
 assert(s);
 fios_file_t* const f = fios_file_receive(s, "/tmp/test.bin");
 assert(f);
-while (fios_file_idle(f, NULL))
+while (fios_file_idle(f, NULL) == fios_file_status_in_progress)
   sleep(1);
 fios_file_close(f);
 fios_serial_close(s);
@@ -54,7 +54,7 @@ fios_serial_t* const s = fios_serial_open("/dev/ttyUSB1");
 assert(s);
 fios_file_t* const f = fios_file_send(s, "/path/to/bin.file");
 assert(f);
-while (fios_file_idle(f, NULL))
+while (fios_file_idle(f, NULL) == fios_file_status_in_progress)
   sleep(1);
 fios_file_close(f);
 fios_serial_close(s);
