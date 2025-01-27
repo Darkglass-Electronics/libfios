@@ -65,7 +65,7 @@ int main(int argc, char* argv[])
     fflush(stdout);
 
     float progress;
-    while (fios_file_idle(f, &progress))
+    while (fios_file_idle(f, &progress) == fios_file_status_in_progress)
     {
         fprintf(stdout, "\rProgress: %.1f %%", progress * 100);
         fflush(stdout);

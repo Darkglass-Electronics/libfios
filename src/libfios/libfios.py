@@ -71,6 +71,11 @@ def fios_serial_close(s):
 # ---------------------------------------------------------------------------------------------------------------------
 # file operations (using background threads)
 
+# fios_file_status_t
+fios_file_status_error = 0
+fios_file_status_in_progress = 1
+fios_file_status_completed = 2
+
 # prepare to receive data from a serial port into the file @a outpath
 # a background thread is used for receiving data from the serial port and writing to the file
 # use @fios_file_idle to query current progress and @fios_file_close when done
@@ -91,21 +96,37 @@ def fios_file_send(s, inpath):
 
 # check status of an active serial file transfer
 # NOTE in python this returns (status, progress) where:
-# - `status` is true if the file is still being received/sent, false if operation completed or failed
+# - `status` is normal return value
 # - `progress` is current progress between 0.0 and 1.0
 libfios.fios_file_idle.argtypes = (POINTER(fios_file_t), POINTER(c_float),)
-libfios.fios_file_idle.restype  = c_bool
+libfios.fios_file_idle.restype  = c_int
 
-def fios_file_idle(s):
+def fios_file_idle(f):
     progress = c_float(0.0)
-    return (libfios.fios_file_idle(s, pointer(progress)), progress.value)
+    return (libfios.fios_file_idle(f, pointer(progress)), progress.value)
+
+# get the current progress of an active serial file transfer
+# returns a value between 0.0 and 1.0
+libfios.fios_file_get_progress.argtypes = (POINTER(fios_file_t),)
+libfios.fios_file_get_progress.restype  = c_float
+
+def fios_file_get_progress(f):
+    return libfios.fios_file_get_progress(f)
 
 # close the file operation
 # must still be called even if `fios_file_idle` returns false
 libfios.fios_file_close.argtypes = (POINTER(fios_file_t),)
-libfios.fios_file_close.restype  = c_bool
+libfios.fios_file_close.restype  = None
 
-def fios_file_close(s):
-    return libfios.fios_file_close(s)
+def fios_file_close(f):
+    libfios.fios_file_close(f)
+
+# get the error message for the case where `fios_file_idle` returns `fios_file_status_error`
+# must not be called after `fios_file_close`
+libfios.fios_file_get_last_error.argtypes = (POINTER(fios_file_t),)
+libfios.fios_file_get_last_error.restype  = c_char_p
+
+def fios_file_get_last_error(f):
+    return libfios.fios_file_get_last_error(f).decode("utf-8")
 
 # ---------------------------------------------------------------------------------------------------------------------

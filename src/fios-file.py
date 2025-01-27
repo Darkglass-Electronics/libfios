@@ -12,6 +12,7 @@ from libfios import (
     fios_file_receive,
     fios_file_idle,
     fios_file_close,
+    fios_file_status_in_progress,
 )
 
 def usage():
@@ -53,7 +54,7 @@ def main():
 
     while True:
         r = fios_file_idle(f)
-        if not r[0]:
+        if r[0] != fios_file_status_in_progress:
             break
         sys.stdout.write("\rProgress: %.1f %%" % (r[1] * 100))
         sys.stdout.flush()
