@@ -84,6 +84,12 @@ bool fios_serial_write_payload(fios_serial_t* s, const void* payload, size_t siz
 // --------------------------------------------------------------------------------------------------------------------
 // file operations (using background threads)
 
+typedef enum {
+    fios_file_status_error,
+    fios_file_status_in_progress,
+    fios_file_status_completed,
+} fios_file_status_t;
+
 /*! prepare to receive data from a serial port into the file @a outpath
  * a background thread is used for receiving data from the serial port and writing to the file
  * use @fios_file_idle to query current progress and @fios_file_close when done
@@ -103,13 +109,25 @@ fios_file_t* fios_file_send(fios_serial_t* s, const char* inpath);
  * returns true if the file is still being received/sent, false if operation completed or failed
  */
 FIOS_API
-bool fios_file_idle(fios_file_t* s, float* progress);
+fios_file_status_t fios_file_idle(fios_file_t* f, float* progress);
+
+/*! get the current progress of an active serial file transfer
+ * returns a value between 0.0 and 1.0
+ */
+FIOS_API
+float fios_file_get_progress(fios_file_t* f);
 
 /*! close the file operation
  * must still be called even if @fios_file_idle returns false
  */
 FIOS_API
-bool fios_file_close(fios_file_t* s);
+void fios_file_close(fios_file_t* f);
+
+/*! get the error message for the case where @fios_file_idle returns @fios_file_status_error
+ * must not be called after @fios_file_close
+ */
+FIOS_API
+const char* fios_file_get_last_error(fios_file_t* f);
 
 // --------------------------------------------------------------------------------------------------------------------
 

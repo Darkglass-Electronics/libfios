@@ -24,12 +24,14 @@
 typedef struct _fios_file_t {
     fios_serial_t* serial;
     FILE* file;
+    char* error;
    #ifdef _WIN32
     HANDLE thread;
    #else
     pthread_t thread;
    #endif
     long current, size;
+    fios_file_status_t status;
 } fios_file_t;
 
 #ifdef _WIN32
@@ -82,6 +84,8 @@ static void* _fios_receive_thread(void* const arg)
         if (! fios_serial_read_cmd(s, cmd))
         {
             fprintf(stderr, "serial port reopen failed!\n");
+            f->status = fios_file_status_error;
+            f->error = strdup("serial port reopen failed");
             return _fios_thread_close(f);
         }
     }
@@ -89,6 +93,8 @@ static void* _fios_receive_thread(void* const arg)
     if (cmd[0] != 's' || cmd[1] != ' ')
     {
         fprintf(stderr, "error invalid command type %02x:'%c' %02x:'%c'\n", cmd[0], cmd[0], cmd[1], cmd[1]);
+        f->status = fios_file_status_error;
+        f->error = strdup("unexpected data received (invalid first command)");
         return _fios_thread_close(f);
     }
 
@@ -100,6 +106,8 @@ static void* _fios_receive_thread(void* const arg)
     if (cmd[0] != 's' || cmd[1] != ' ')
     {
         fprintf(stderr, "invalid file size %ld\n", size);
+        f->status = fios_file_status_error;
+        f->error = strdup("unexpected data received (invalid size)");
         return _fios_thread_close(f);
     }
 
@@ -107,7 +115,7 @@ static void* _fios_receive_thread(void* const arg)
 
     f->size = size;
 
-    while (f->file != NULL && f->current != size)
+    while (f->file != NULL && f->status != fios_file_status_error && f->current != size)
     {
         DEBUG_PRINT("waiting for command\n");
 
@@ -119,6 +127,8 @@ static void* _fios_receive_thread(void* const arg)
 
         if (cmd[0] != 'w' || cmd[1] != ' ')
         {
+            f->status = fios_file_status_error;
+            f->error = strdup("unexpected data received (invalid command)");
             fprintf(stderr, "error invalid command type %02x:'%c' %02x:'%c'\n", cmd[0], cmd[0], cmd[1], cmd[1]);
             break;
         }
@@ -143,6 +153,8 @@ static void* _fios_receive_thread(void* const arg)
 
             if (w < 0)
             {
+                f->status = fios_file_status_error;
+                f->error = strdup("failed to write to output file");
                 perror("error partial write");
                 break;
             }
@@ -150,6 +162,9 @@ static void* _fios_receive_thread(void* const arg)
 
         f->current += size;
     }
+
+    if (f->file != NULL && f->status != fios_file_status_error && f->current == size)
+        f->status = fios_file_status_completed;
 
     DEBUG_PRINT("_fios_receive_thread done\n");
     return _fios_thread_close(f);
@@ -204,6 +219,8 @@ static void* _fios_send_thread(void* const arg)
         f->current += r;
     }
 
+    f->status = fios_file_status_completed;
+
     DEBUG_PRINT("writing command for close\n");
     test = fios_serial_write_cmd(s, "q");
     assert(test);
@@ -234,7 +251,9 @@ fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath
 
     f->serial = s;
     f->file = file;
+    f->error = NULL;
     f->current = f->size = 0;
+    f->status = fios_file_status_in_progress;
 
    #ifdef _WIN32
     f->thread = (HANDLE)_beginthreadex(NULL, 0, _fios_receive_thread, f, 0, NULL);
@@ -293,8 +312,10 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
 
     f->serial = s;
     f->file = file;
+    f->error = NULL;
     f->current = 0;
     f->size = size > 0 ? size : 0;
+    f->status = fios_file_status_in_progress;
 
    #ifdef _WIN32
     f->thread = (HANDLE)_beginthreadex(NULL, 0, _fios_send_thread, f, 0, NULL);
@@ -322,17 +343,24 @@ error_free:
     return NULL;
 }
 
-bool fios_file_idle(fios_file_t* const f, float* const progress)
+fios_file_status_t fios_file_idle(fios_file_t* const f, float* const progress)
 {
     assert(f != NULL);
 
     if (progress != NULL)
         *progress = f->size != 0 ? (double)f->current / f->size : 0.f;
 
-    return f->file != NULL;
+    return f->status;
 }
 
-bool fios_file_close(fios_file_t* const f)
+float fios_file_get_progress(fios_file_t* const f)
+{
+    assert(f != NULL);
+
+    return f->size != 0 ? (double)f->current / f->size : 0.f;
+}
+
+void fios_file_close(fios_file_t* const f)
 {
     assert(f != NULL);
 
@@ -351,7 +379,13 @@ bool fios_file_close(fios_file_t* const f)
        #endif
     }
 
+    free(f->error);
     free(f);
+}
 
-    return true;
+const char* fios_file_get_last_error(fios_file_t* const f)
+{
+    assert(f != NULL);
+
+    return f->error != NULL ? f->error : "no error";
 }
