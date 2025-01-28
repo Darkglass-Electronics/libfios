@@ -12,6 +12,7 @@ from ctypes import (
     c_bool,
     c_char_p,
     c_float,
+    c_int,
     pointer,
 )
 

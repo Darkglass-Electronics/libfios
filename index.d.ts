@@ -12,6 +12,12 @@ declare module '*libfios' {
     CMD_SIZE: number
     MAX_FILE_SIZE: number
     MAX_PAYLOAD_SIZE: number
+    /**
+     * @description File Transfer Status
+     */
+    fios_file_status_error: 0
+    fios_file_status_in_progress: 1
+    fios_file_status_completed: 2
 
     /**
      * @description Open the stream (Receiver)
@@ -35,6 +41,9 @@ declare module '*libfios' {
     new_float_ptr: Function
     get_float_ptr_value: Function
     delete_float_ptr: Function
+
+    fios_file_get_progress: Function
+    fios_file_get_last_error: Function
   }
 
   /**

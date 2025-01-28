@@ -11,5 +11,10 @@ from .libfios import (
     fios_file_send,
     fios_file_receive,
     fios_file_idle,
+    fios_file_get_last_error,
+    fios_file_get_progress,
     fios_file_close,
+    fios_file_status_error,
+    fios_file_status_in_progress,
+    fios_file_status_completed,
 )
