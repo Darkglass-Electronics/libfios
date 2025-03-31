@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2024 Filipe Coelho <falktx@darkglass.com>
+// SPDX-FileCopyrightText: 2024-2025 Filipe Coelho <falktx@darkglass.com>
 // SPDX-License-Identifier: ISC
 
 #include "libfios-serial.h"
@@ -24,7 +24,7 @@
 typedef struct _fios_file_t {
     fios_serial_t* serial;
     FILE* file;
-    char* error;
+    const char* error;
    #ifdef _WIN32
     HANDLE thread;
    #else
@@ -83,18 +83,18 @@ static void* _fios_receive_thread(void* const arg)
 
         if (! fios_serial_read_cmd(s, cmd))
         {
-            fprintf(stderr, "serial port reopen failed!\n");
+            f->error = "serial port reopen failed";
             f->status = fios_file_status_error;
-            f->error = strdup("serial port reopen failed");
+            fprintf(stderr, "serial port reopen failed!\n");
             return _fios_thread_close(f);
         }
     }
 
     if (cmd[0] != 's' || cmd[1] != ' ')
     {
-        fprintf(stderr, "error invalid command type %02x:'%c' %02x:'%c'\n", cmd[0], cmd[0], cmd[1], cmd[1]);
+        f->error = "unexpected data received (invalid first command)";
         f->status = fios_file_status_error;
-        f->error = strdup("unexpected data received (invalid first command)");
+        fprintf(stderr, "error invalid command type %02x:'%c' %02x:'%c'\n", cmd[0], cmd[0], cmd[1], cmd[1]);
         return _fios_thread_close(f);
     }
 
@@ -105,9 +105,9 @@ static void* _fios_receive_thread(void* const arg)
 
     if (cmd[0] != 's' || cmd[1] != ' ')
     {
-        fprintf(stderr, "invalid file size %ld\n", size);
+        f->error = "unexpected data received (invalid size)";
         f->status = fios_file_status_error;
-        f->error = strdup("unexpected data received (invalid size)");
+        fprintf(stderr, "invalid file size %ld\n", size);
         return _fios_thread_close(f);
     }
 
@@ -127,8 +127,8 @@ static void* _fios_receive_thread(void* const arg)
 
         if (cmd[0] != 'w' || cmd[1] != ' ')
         {
+            f->error = "unexpected data received (invalid command)";
             f->status = fios_file_status_error;
-            f->error = strdup("unexpected data received (invalid command)");
             fprintf(stderr, "error invalid command type %02x:'%c' %02x:'%c'\n", cmd[0], cmd[0], cmd[1], cmd[1]);
             break;
         }
@@ -153,8 +153,8 @@ static void* _fios_receive_thread(void* const arg)
 
             if (w < 0)
             {
+                f->error = "failed to write to output file";
                 f->status = fios_file_status_error;
-                f->error = strdup("failed to write to output file");
                 perror("error partial write");
                 break;
             }
@@ -214,7 +214,15 @@ static void* _fios_send_thread(void* const arg)
 
         DEBUG_PRINT("waiting for ok signal for %d | 0x%x bytes\n", r, r);
         test = fios_serial_read_cmd(s, cmd);
-        assert(test);
+        // assert(test);
+
+        if (! test)
+        {
+            f->error = "serial port writing failed";
+            f->status = fios_file_status_error;
+            fprintf(stderr, "serial port writing failed!\n");
+            return _fios_thread_close(f);
+        }
 
         f->current += r;
     }
@@ -331,6 +339,8 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
         fprintf(stderr, "fios: failed to create sender thread, error %d: %s\n", errno, strerror(errno));
         goto error_close;
     }
+
+    pthread_detach(f->thread);
    #endif
 
     return f;
@@ -371,15 +381,15 @@ void fios_file_close(fios_file_t* const f)
         f->file = NULL;
         fclose(file);
 
-       #ifdef _WIN32
-        WaitForSingleObject(f->thread, INFINITE);
-        CloseHandle(f->thread);
-       #else
-        pthread_join(f->thread, NULL);
-       #endif
+        if (f->status != fios_file_status_error)
+        {
+           #ifdef _WIN32
+            WaitForSingleObject(f->thread, INFINITE);
+            CloseHandle(f->thread);
+           #endif
+        }
     }
 
-    free(f->error);
     free(f);
 }
 
