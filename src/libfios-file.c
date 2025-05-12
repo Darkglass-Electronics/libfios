@@ -239,7 +239,16 @@ fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath
         return NULL;
     }
 
-    FILE* const file = fopen(outpath, "wb");
+    FILE* file;
+   #ifdef _WIN32
+    WCHAR loutpath[MAX_PATH];
+    if (MultiByteToWideChar(CP_UTF8, 0, outpath, -1, loutpath, MAX_PATH) != 0)
+        file = _wfopen(loutpath, L"wb");
+    else
+        file = NULL;
+   #else
+    file = fopen(outpath, "wb");
+   #endif
 
     if (file == NULL)
     {
@@ -291,7 +300,16 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
         return NULL;
     }
 
-    FILE* const file = fopen(inpath, "rb");
+    FILE* file;
+   #ifdef _WIN32
+    WCHAR linpath[MAX_PATH];
+    if (MultiByteToWideChar(CP_UTF8, 0, inpath, -1, linpath, MAX_PATH) != 0)
+        file = _wfopen(linpath, L"rb");
+    else
+        file = NULL;
+   #else
+    file = fopen(inpath, "rb");
+   #endif
 
     if (file == NULL)
     {
