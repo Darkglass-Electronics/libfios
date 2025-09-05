@@ -10,5 +10,8 @@
   },
   "author": "",
   "license": "ISC",
-  "gypfile": true
+  "gypfile": true,
+  "dependencies": {
+    "electron": "^17.4.11"
+  }
 }
