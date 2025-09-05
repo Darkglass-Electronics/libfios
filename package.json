@@ -11,7 +11,8 @@
   "author": "",
   "license": "ISC",
   "gypfile": true,
-  "dependencies": {
-    "electron": "^17.4.11"
+  "devDependencies": {
+    "electron": "^17.4.11",
+    "node-gyp": "^10.3.1"
   }
 }
