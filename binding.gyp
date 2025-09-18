@@ -1,7 +1,7 @@
 {
   "targets": [
     {
-      "target_name": "libfios",
+      "target_name": "fios",
       "sources": [
         "src/addon.cpp",
         "src/libfios-file.c",
