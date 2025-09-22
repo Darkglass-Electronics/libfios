@@ -10,5 +10,8 @@
   },
   "author": "",
   "license": "ISC",
-  "gypfile": true
+  "gypfile": true,
+  "devDependencies": {
+    "serialport": "12.0.0"
+  }
 }
