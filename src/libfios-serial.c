@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: ISC
 
 #include "libfios-serial.h"
+#include <sys/fcntl.h>
 
 #undef NDEBUG
 #define DEBUG
@@ -258,7 +259,7 @@ fios_serial_t* fios_serial_open(const char* const devpath)
     s->devpath = _strdup(devpath);
     s->h = h;
 #else
-    const int fd = open(devpath, O_RDWR | O_NOCTTY);
+    const int fd = open(devpath, O_RDWR | O_NONBLOCK | O_NOCTTY);
 
     if (fd < 0)
     {
@@ -325,6 +326,9 @@ fios_serial_t* fios_serial_open(const char* const devpath)
         fprintf(stderr, "fios: failed to flush serial port output, error %d: %s\n", errno, strerror(errno));
         goto error_close;
     }
+
+    const int flags = fcntl(fd, F_GETFL);
+    fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
 
     s->devpath = strdup(devpath);
     s->fd = fd;
