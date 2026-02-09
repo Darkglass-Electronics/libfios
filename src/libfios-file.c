@@ -16,9 +16,8 @@
 #include <process.h>
 #else
 #include <pthread.h>
+#include <semaphore.h>
 #endif
-
-// #define LIBFIOS_PTHREAD_DETACHED
 
 #define DEBUG_PRINT(...)
 // #define DEBUG_PRINT(...) printf(__VA_ARGS__)
@@ -28,8 +27,10 @@ typedef struct _fios_file_t {
     FILE* file;
     const char* error;
    #ifdef _WIN32
+    HANDLE sem;
     HANDLE thread;
    #else
+    sem_t sem;
     pthread_t thread;
    #endif
     long current, size;
@@ -42,16 +43,6 @@ static unsigned __stdcall _fios_thread_close(fios_file_t* const f)
 static void* _fios_thread_close(fios_file_t* const f)
 #endif
 {
-   #ifdef LIBFIOS_PTHREAD_DETACHED
-    FILE* const file = f->file;
-
-    if (file != NULL)
-    {
-        f->file = NULL;
-        fclose(file);
-    }
-   #endif
-
    #ifdef _WIN32
     _endthreadex(0);
     return 0;
@@ -73,10 +64,22 @@ static void* _fios_receive_thread(void* const arg)
     char cmd[CMD_SIZE];
     bool test;
 
+   #ifdef _WIN32
+    ReleaseSemaphore(f->sem, 1, NULL);
+   #else
+    sem_post(&f->sem);
+   #endif
+
     DEBUG_PRINT("waiting for size\n");
 
     if (! fios_serial_read_cmd(s, cmd))
     {
+        if (f->file == NULL)
+        {
+            fprintf(stderr, "output file was closed while opening serial port!\n");
+            return _fios_thread_close(f);
+        }
+
         fprintf(stderr, "size read failed, forcing reopen of serial port now!\n");
 
         char* const devpath = s->devpath;
@@ -85,11 +88,25 @@ static void* _fios_receive_thread(void* const arg)
         f->serial = fios_serial_open(devpath);
         free(devpath);
 
-        if (! fios_serial_read_cmd(s, cmd))
+        if (f->serial == NULL)
         {
             f->error = "serial port reopen failed";
             f->status = fios_file_status_error;
             fprintf(stderr, "serial port reopen failed!\n");
+            return _fios_thread_close(f);
+        }
+
+        if (! fios_serial_read_cmd(s, cmd))
+        {
+            if (f->file == NULL)
+            {
+                fprintf(stderr, "output file was closed while reopening serial port!\n");
+                return _fios_thread_close(f);
+            }
+
+            f->error = "serial port reopen read failed";
+            f->status = fios_file_status_error;
+            fprintf(stderr, "serial port reopen read failed!\n");
             return _fios_thread_close(f);
         }
     }
@@ -187,6 +204,12 @@ static void* _fios_send_thread(void* const arg)
     char cmd[CMD_SIZE];
     bool test;
 
+   #ifdef _WIN32
+    ReleaseSemaphore(f->sem, 1, NULL);
+   #else
+    sem_post(&f->sem);
+   #endif
+
     DEBUG_PRINT("writing size for %ld | 0x%lx bytes\n", f->size, f->size);
 
     // encode size command as first byte, followed by size
@@ -241,6 +264,29 @@ static void* _fios_send_thread(void* const arg)
     return _fios_thread_close(f);
 }
 
+static bool _fios_thread_sem_wait(fios_file_t* const f)
+{
+    FILE* const file = f->file;
+
+#ifdef _WIN32
+    if (WaitForSingleObject(f->sem, 1000) == WAIT_OBJECT_0)
+        return true;
+#else
+    struct timespec timeout;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    ++timeout.tv_sec;
+
+    if (sem_timedwait(&f->sem, &timeout) == 0)
+        return true;
+#endif
+
+    f->error = "serial port thread failed to start";
+    f->status = fios_file_status_error;
+    f->file = NULL;
+    fclose(file);
+    return false;
+}
+
 fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath)
 {
     fios_file_t* const f = malloc(sizeof(fios_file_t));
@@ -276,7 +322,8 @@ fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath
     f->current = f->size = 0;
     f->status = fios_file_status_in_progress;
 
-  #ifdef _WIN32
+   #ifdef _WIN32
+    f->sem = CreateSemaphoreA(NULL, 0, 1, NULL);
     f->thread = (HANDLE)_beginthreadex(NULL, 0, _fios_receive_thread, f, 0, NULL);
     if (f->thread == NULL)
     {
@@ -284,16 +331,18 @@ fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath
                 GetLastError(), GetLastErrorString(GetLastError()));
         goto error_close;
     }
-  #else
+
+   #else
+    sem_init(&f->sem, 0, 0);
     if (pthread_create(&f->thread, NULL, _fios_receive_thread, f) != 0)
     {
         fprintf(stderr, "fios: failed to create sender thread, error %d: %s\n", errno, strerror(errno));
         goto error_close;
     }
-   #ifdef LIBFIOS_PTHREAD_DETACHED
-    pthread_detach(f->thread);
    #endif
-  #endif
+
+    if (! _fios_thread_sem_wait(f))
+        goto error_free;
 
     return f;
 
@@ -350,7 +399,8 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
     f->size = size > 0 ? size : 0;
     f->status = fios_file_status_in_progress;
 
-  #ifdef _WIN32
+   #ifdef _WIN32
+    f->sem = CreateSemaphoreA(NULL, 0, 1, NULL);
     f->thread = (HANDLE)_beginthreadex(NULL, 0, _fios_send_thread, f, 0, NULL);
     if (f->thread == NULL)
     {
@@ -358,16 +408,17 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
                 GetLastError(), GetLastErrorString(GetLastError()));
         goto error_close;
     }
-  #else
+   #else
+    sem_init(&f->sem, 0, 0);
     if (pthread_create(&f->thread, NULL, _fios_send_thread, f) != 0)
     {
         fprintf(stderr, "fios: failed to create sender thread, error %d: %s\n", errno, strerror(errno));
         goto error_close;
     }
-   #ifdef LIBFIOS_PTHREAD_DETACHED
-    pthread_detach(f->thread);
    #endif
-  #endif
+
+    if (! _fios_thread_sem_wait(f))
+        goto error_free;
 
     return f;
 
@@ -406,17 +457,16 @@ void fios_file_close(fios_file_t* const f)
     {
         f->file = NULL;
         fclose(file);
-
-       #ifdef LIBFIOS_PTHREAD_DETACHED
-        if (f->status != fios_file_status_error)
-       #endif
-        {
-           #ifdef _WIN32
-            WaitForSingleObject(f->thread, INFINITE);
-            CloseHandle(f->thread);
-           #endif
-        }
     }
+
+   #ifdef _WIN32
+    WaitForSingleObject(f->thread, INFINITE);
+    CloseHandle(f->thread);
+    CloseHandle(f->sem);
+   #else
+    pthread_join(f->thread, NULL);
+    sem_destroy(&f->sem);
+   #endif
 
     free(f);
 }
