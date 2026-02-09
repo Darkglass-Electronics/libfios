@@ -18,6 +18,8 @@
 #include <pthread.h>
 #endif
 
+// #define LIBFIOS_PTHREAD_DETACHED
+
 #define DEBUG_PRINT(...)
 // #define DEBUG_PRINT(...) printf(__VA_ARGS__)
 
@@ -40,6 +42,7 @@ static unsigned __stdcall _fios_thread_close(fios_file_t* const f)
 static void* _fios_thread_close(fios_file_t* const f)
 #endif
 {
+   #ifdef LIBFIOS_PTHREAD_DETACHED
     FILE* const file = f->file;
 
     if (file != NULL)
@@ -47,6 +50,7 @@ static void* _fios_thread_close(fios_file_t* const f)
         f->file = NULL;
         fclose(file);
     }
+   #endif
 
    #ifdef _WIN32
     _endthreadex(0);
@@ -272,7 +276,7 @@ fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath
     f->current = f->size = 0;
     f->status = fios_file_status_in_progress;
 
-   #ifdef _WIN32
+  #ifdef _WIN32
     f->thread = (HANDLE)_beginthreadex(NULL, 0, _fios_receive_thread, f, 0, NULL);
     if (f->thread == NULL)
     {
@@ -280,13 +284,16 @@ fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath
                 GetLastError(), GetLastErrorString(GetLastError()));
         goto error_close;
     }
-   #else
+  #else
     if (pthread_create(&f->thread, NULL, _fios_receive_thread, f) != 0)
     {
         fprintf(stderr, "fios: failed to create sender thread, error %d: %s\n", errno, strerror(errno));
         goto error_close;
     }
+   #ifdef LIBFIOS_PTHREAD_DETACHED
+    pthread_detach(f->thread);
    #endif
+  #endif
 
     return f;
 
@@ -343,7 +350,7 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
     f->size = size > 0 ? size : 0;
     f->status = fios_file_status_in_progress;
 
-   #ifdef _WIN32
+  #ifdef _WIN32
     f->thread = (HANDLE)_beginthreadex(NULL, 0, _fios_send_thread, f, 0, NULL);
     if (f->thread == NULL)
     {
@@ -351,15 +358,16 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
                 GetLastError(), GetLastErrorString(GetLastError()));
         goto error_close;
     }
-   #else
+  #else
     if (pthread_create(&f->thread, NULL, _fios_send_thread, f) != 0)
     {
         fprintf(stderr, "fios: failed to create sender thread, error %d: %s\n", errno, strerror(errno));
         goto error_close;
     }
-
+   #ifdef LIBFIOS_PTHREAD_DETACHED
     pthread_detach(f->thread);
    #endif
+  #endif
 
     return f;
 
@@ -399,7 +407,9 @@ void fios_file_close(fios_file_t* const f)
         f->file = NULL;
         fclose(file);
 
+       #ifdef LIBFIOS_PTHREAD_DETACHED
         if (f->status != fios_file_status_error)
+       #endif
         {
            #ifdef _WIN32
             WaitForSingleObject(f->thread, INFINITE);
