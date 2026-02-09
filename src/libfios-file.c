@@ -38,9 +38,9 @@ typedef struct _fios_file_t {
 } fios_file_t;
 
 #ifdef _WIN32
-static unsigned __stdcall _fios_thread_close(fios_file_t* const f)
+static unsigned __stdcall _fios_thread_close()
 #else
-static void* _fios_thread_close(fios_file_t* const f)
+static void* _fios_thread_close()
 #endif
 {
    #ifdef _WIN32
@@ -77,7 +77,7 @@ static void* _fios_receive_thread(void* const arg)
         if (f->file == NULL)
         {
             fprintf(stderr, "output file was closed while opening serial port!\n");
-            return _fios_thread_close(f);
+            return _fios_thread_close();
         }
 
         fprintf(stderr, "size read failed, forcing reopen of serial port now!\n");
@@ -93,7 +93,7 @@ static void* _fios_receive_thread(void* const arg)
             f->error = "serial port reopen failed";
             f->status = fios_file_status_error;
             fprintf(stderr, "serial port reopen failed!\n");
-            return _fios_thread_close(f);
+            return _fios_thread_close();
         }
 
         if (! fios_serial_read_cmd(s, cmd))
@@ -101,13 +101,13 @@ static void* _fios_receive_thread(void* const arg)
             if (f->file == NULL)
             {
                 fprintf(stderr, "output file was closed while reopening serial port!\n");
-                return _fios_thread_close(f);
+                return _fios_thread_close();
             }
 
             f->error = "serial port reopen read failed";
             f->status = fios_file_status_error;
             fprintf(stderr, "serial port reopen read failed!\n");
-            return _fios_thread_close(f);
+            return _fios_thread_close();
         }
     }
 
@@ -116,7 +116,7 @@ static void* _fios_receive_thread(void* const arg)
         f->error = "unexpected data received (invalid first command)";
         f->status = fios_file_status_error;
         fprintf(stderr, "error invalid command type %02x:'%c' %02x:'%c'\n", cmd[0], cmd[0], cmd[1], cmd[1]);
-        return _fios_thread_close(f);
+        return _fios_thread_close();
     }
 
     cmd[CMD_SIZE - 1] = 0;
@@ -129,7 +129,7 @@ static void* _fios_receive_thread(void* const arg)
         f->error = "unexpected data received (invalid size)";
         f->status = fios_file_status_error;
         fprintf(stderr, "invalid file size %ld\n", size);
-        return _fios_thread_close(f);
+        return _fios_thread_close();
     }
 
     DEBUG_PRINT("file size %ld\n", size);
@@ -188,7 +188,7 @@ static void* _fios_receive_thread(void* const arg)
         f->status = fios_file_status_completed;
 
     DEBUG_PRINT("_fios_receive_thread done\n");
-    return _fios_thread_close(f);
+    return _fios_thread_close();
 }
 
 #ifdef _WIN32
@@ -248,7 +248,7 @@ static void* _fios_send_thread(void* const arg)
             f->error = "serial port writing failed";
             f->status = fios_file_status_error;
             fprintf(stderr, "serial port writing failed!\n");
-            return _fios_thread_close(f);
+            return _fios_thread_close();
         }
 
         f->current += r;
@@ -261,7 +261,7 @@ static void* _fios_send_thread(void* const arg)
     assert(test);
 
     DEBUG_PRINT("_fios_send_thread done\n");
-    return _fios_thread_close(f);
+    return _fios_thread_close();
 }
 
 static bool _fios_thread_sem_wait(fios_file_t* const f)
