@@ -1,8 +1,7 @@
-// SPDX-FileCopyrightText: 2024 Filipe Coelho <falktx@darkglass.com>
+// SPDX-FileCopyrightText: 2024-2026 Filipe Coelho <falktx@darkglass.com>
 // SPDX-License-Identifier: ISC
 
 #include "libfios-serial.h"
-#include <sys/fcntl.h>
 
 #undef NDEBUG
 #define DEBUG

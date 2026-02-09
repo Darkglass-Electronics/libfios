@@ -7,13 +7,14 @@ echo $target
 
 case "${target}" in
     "Darwin")
-        brew install swig
+        brew install python-setuptools swig
     ;;
     "Linux")
         pip3 install swig
     ;;
     "MINGW64"*)
+        pip3 install setuptools
     ;;
 esac
 
-yarn global add node-gyp
+yarn global add node-gyp@9.4.1

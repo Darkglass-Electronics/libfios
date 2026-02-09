@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2024-2025 Filipe Coelho <falktx@darkglass.com>
+// SPDX-FileCopyrightText: 2024-2026 Filipe Coelho <falktx@darkglass.com>
 // SPDX-License-Identifier: ISC
 
 #include "libfios-serial.h"
@@ -11,7 +11,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#ifdef _WIN32
+#if defined(__APPLE__)
+#include <mach/mach.h>
+#include <mach/semaphore.h>
+#include <pthread.h>
+#elif defined(_WIN32)
 #include <windows.h>
 #include <process.h>
 #else
@@ -26,7 +30,11 @@ typedef struct _fios_file_t {
     fios_serial_t* serial;
     FILE* file;
     const char* error;
-   #ifdef _WIN32
+   #if defined(__APPLE__)
+    mach_port_t task;
+    semaphore_t sem;
+    pthread_t thread;
+   #elif defined(_WIN32)
     HANDLE sem;
     HANDLE thread;
    #else
@@ -64,7 +72,9 @@ static void* _fios_receive_thread(void* const arg)
     char cmd[CMD_SIZE];
     bool test;
 
-   #ifdef _WIN32
+   #if defined(__APPLE__)
+    semaphore_signal(f->sem);
+   #elif defined(_WIN32)
     ReleaseSemaphore(f->sem, 1, NULL);
    #else
     sem_post(&f->sem);
@@ -204,7 +214,9 @@ static void* _fios_send_thread(void* const arg)
     char cmd[CMD_SIZE];
     bool test;
 
-   #ifdef _WIN32
+   #if defined(__APPLE__)
+    semaphore_signal(f->sem);
+   #elif defined(_WIN32)
     ReleaseSemaphore(f->sem, 1, NULL);
    #else
     sem_post(&f->sem);
@@ -268,17 +280,23 @@ static bool _fios_thread_sem_wait(fios_file_t* const f)
 {
     FILE* const file = f->file;
 
-#ifdef _WIN32
+   #if defined(__APPLE__)
+    struct mach_timespec timeout = { 0 };
+    timeout.tv_sec = 1;
+
+    if (semaphore_timedwait(f->sem, timeout) == KERN_SUCCESS)
+        return true;
+   #elif defined(_WIN32)
     if (WaitForSingleObject(f->sem, 1000) == WAIT_OBJECT_0)
         return true;
-#else
+   #else
     struct timespec timeout;
     clock_gettime(CLOCK_REALTIME, &timeout);
     ++timeout.tv_sec;
 
     if (sem_timedwait(&f->sem, &timeout) == 0)
         return true;
-#endif
+   #endif
 
     f->error = "serial port thread failed to start";
     f->status = fios_file_status_error;
@@ -289,7 +307,7 @@ static bool _fios_thread_sem_wait(fios_file_t* const f)
 
 fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath)
 {
-    fios_file_t* const f = malloc(sizeof(fios_file_t));
+    fios_file_t* const f = calloc(1, sizeof(fios_file_t));
 
     if (f == NULL)
     {
@@ -322,8 +340,16 @@ fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath
     f->current = f->size = 0;
     f->status = fios_file_status_in_progress;
 
-   #ifdef _WIN32
+   #if defined(__APPLE__)
+    f->task = mach_task_self();
+    semaphore_create(f->task, &f->sem, SYNC_POLICY_FIFO, 0);
+   #elif defined(_WIN32)
     f->sem = CreateSemaphoreA(NULL, 0, 1, NULL);
+   #else
+    sem_init(&f->sem, 0, 0);
+   #endif
+
+   #ifdef _WIN32
     f->thread = (HANDLE)_beginthreadex(NULL, 0, _fios_receive_thread, f, 0, NULL);
     if (f->thread == NULL)
     {
@@ -333,7 +359,6 @@ fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath
     }
 
    #else
-    sem_init(&f->sem, 0, 0);
     if (pthread_create(&f->thread, NULL, _fios_receive_thread, f) != 0)
     {
         fprintf(stderr, "fios: failed to create sender thread, error %d: %s\n", errno, strerror(errno));
@@ -356,7 +381,7 @@ error_free:
 
 fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
 {
-    fios_file_t* const f = malloc(sizeof(fios_file_t));
+    fios_file_t* const f = calloc(1, sizeof(fios_file_t));
 
     if (f == NULL)
     {
@@ -399,8 +424,16 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
     f->size = size > 0 ? size : 0;
     f->status = fios_file_status_in_progress;
 
-   #ifdef _WIN32
+   #if defined(__APPLE__)
+    f->task = mach_task_self();
+    semaphore_create(f->task, &f->sem, SYNC_POLICY_FIFO, 0);
+   #elif defined(_WIN32)
     f->sem = CreateSemaphoreA(NULL, 0, 1, NULL);
+   #else
+    sem_init(&f->sem, 0, 0);
+   #endif
+
+   #ifdef _WIN32
     f->thread = (HANDLE)_beginthreadex(NULL, 0, _fios_send_thread, f, 0, NULL);
     if (f->thread == NULL)
     {
@@ -409,7 +442,6 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
         goto error_close;
     }
    #else
-    sem_init(&f->sem, 0, 0);
     if (pthread_create(&f->thread, NULL, _fios_send_thread, f) != 0)
     {
         fprintf(stderr, "fios: failed to create sender thread, error %d: %s\n", errno, strerror(errno));
@@ -459,7 +491,10 @@ void fios_file_close(fios_file_t* const f)
         fclose(file);
     }
 
-   #ifdef _WIN32
+   #if defined(__APPLE__)
+    pthread_join(f->thread, NULL);
+    semaphore_destroy(f->task, f->sem);
+   #elif defined(_WIN32)
     WaitForSingleObject(f->thread, INFINITE);
     CloseHandle(f->thread);
     CloseHandle(f->sem);
