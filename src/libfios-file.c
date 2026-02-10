@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2024 Filipe Coelho <falktx@darkglass.com>
+// SPDX-FileCopyrightText: 2024-2026 Filipe Coelho <falktx@darkglass.com>
 // SPDX-License-Identifier: ISC
 
 #include "libfios-serial.h"
@@ -11,11 +11,16 @@
 #include <stdio.h>
 #include <string.h>
 
-#ifdef _WIN32
+#if defined(__APPLE__)
+#include <mach/mach.h>
+#include <mach/semaphore.h>
+#include <pthread.h>
+#elif defined(_WIN32)
 #include <windows.h>
 #include <process.h>
 #else
 #include <pthread.h>
+#include <semaphore.h>
 #endif
 
 #define DEBUG_PRINT(...)
@@ -24,10 +29,16 @@
 typedef struct _fios_file_t {
     fios_serial_t* serial;
     FILE* file;
-    char* error;
-   #ifdef _WIN32
+    const char* error;
+   #if defined(__APPLE__)
+    mach_port_t task;
+    semaphore_t sem;
+    pthread_t thread;
+   #elif defined(_WIN32)
+    HANDLE sem;
     HANDLE thread;
    #else
+    sem_t sem;
     pthread_t thread;
    #endif
     long current, size;
@@ -35,19 +46,11 @@ typedef struct _fios_file_t {
 } fios_file_t;
 
 #ifdef _WIN32
-static unsigned __stdcall _fios_thread_close(fios_file_t* const f)
+static unsigned __stdcall _fios_thread_close()
 #else
-static void* _fios_thread_close(fios_file_t* const f)
+static void* _fios_thread_close()
 #endif
 {
-    FILE* const file = f->file;
-
-    if (file != NULL)
-    {
-        f->file = NULL;
-        fclose(file);
-    }
-
    #ifdef _WIN32
     _endthreadex(0);
     return 0;
@@ -69,10 +72,24 @@ static void* _fios_receive_thread(void* const arg)
     char cmd[CMD_SIZE];
     bool test;
 
+   #if defined(__APPLE__)
+    semaphore_signal(f->sem);
+   #elif defined(_WIN32)
+    ReleaseSemaphore(f->sem, 1, NULL);
+   #else
+    sem_post(&f->sem);
+   #endif
+
     DEBUG_PRINT("waiting for size\n");
 
     if (! fios_serial_read_cmd(s, cmd))
     {
+        if (f->file == NULL)
+        {
+            fprintf(stderr, "output file was closed while opening serial port!\n");
+            return _fios_thread_close();
+        }
+
         fprintf(stderr, "size read failed, forcing reopen of serial port now!\n");
 
         char* const devpath = s->devpath;
@@ -81,21 +98,35 @@ static void* _fios_receive_thread(void* const arg)
         f->serial = fios_serial_open(devpath);
         free(devpath);
 
+        if (f->serial == NULL)
+        {
+            f->error = "serial port reopen failed";
+            f->status = fios_file_status_error;
+            fprintf(stderr, "serial port reopen failed!\n");
+            return _fios_thread_close();
+        }
+
         if (! fios_serial_read_cmd(s, cmd))
         {
-            fprintf(stderr, "serial port reopen failed!\n");
+            if (f->file == NULL)
+            {
+                fprintf(stderr, "output file was closed while reopening serial port!\n");
+                return _fios_thread_close();
+            }
+
+            f->error = "serial port reopen read failed";
             f->status = fios_file_status_error;
-            f->error = strdup("serial port reopen failed");
-            return _fios_thread_close(f);
+            fprintf(stderr, "serial port reopen read failed!\n");
+            return _fios_thread_close();
         }
     }
 
     if (cmd[0] != 's' || cmd[1] != ' ')
     {
-        fprintf(stderr, "error invalid command type %02x:'%c' %02x:'%c'\n", cmd[0], cmd[0], cmd[1], cmd[1]);
+        f->error = "unexpected data received (invalid first command)";
         f->status = fios_file_status_error;
-        f->error = strdup("unexpected data received (invalid first command)");
-        return _fios_thread_close(f);
+        fprintf(stderr, "error invalid command type %02x:'%c' %02x:'%c'\n", cmd[0], cmd[0], cmd[1], cmd[1]);
+        return _fios_thread_close();
     }
 
     cmd[CMD_SIZE - 1] = 0;
@@ -105,10 +136,10 @@ static void* _fios_receive_thread(void* const arg)
 
     if (cmd[0] != 's' || cmd[1] != ' ')
     {
-        fprintf(stderr, "invalid file size %ld\n", size);
+        f->error = "unexpected data received (invalid size)";
         f->status = fios_file_status_error;
-        f->error = strdup("unexpected data received (invalid size)");
-        return _fios_thread_close(f);
+        fprintf(stderr, "invalid file size %ld\n", size);
+        return _fios_thread_close();
     }
 
     DEBUG_PRINT("file size %ld\n", size);
@@ -127,8 +158,8 @@ static void* _fios_receive_thread(void* const arg)
 
         if (cmd[0] != 'w' || cmd[1] != ' ')
         {
+            f->error = "unexpected data received (invalid command)";
             f->status = fios_file_status_error;
-            f->error = strdup("unexpected data received (invalid command)");
             fprintf(stderr, "error invalid command type %02x:'%c' %02x:'%c'\n", cmd[0], cmd[0], cmd[1], cmd[1]);
             break;
         }
@@ -153,8 +184,8 @@ static void* _fios_receive_thread(void* const arg)
 
             if (w < 0)
             {
+                f->error = "failed to write to output file";
                 f->status = fios_file_status_error;
-                f->error = strdup("failed to write to output file");
                 perror("error partial write");
                 break;
             }
@@ -167,7 +198,7 @@ static void* _fios_receive_thread(void* const arg)
         f->status = fios_file_status_completed;
 
     DEBUG_PRINT("_fios_receive_thread done\n");
-    return _fios_thread_close(f);
+    return _fios_thread_close();
 }
 
 #ifdef _WIN32
@@ -182,6 +213,14 @@ static void* _fios_send_thread(void* const arg)
     char buf[MAX_PAYLOAD_SIZE];
     char cmd[CMD_SIZE];
     bool test;
+
+   #if defined(__APPLE__)
+    semaphore_signal(f->sem);
+   #elif defined(_WIN32)
+    ReleaseSemaphore(f->sem, 1, NULL);
+   #else
+    sem_post(&f->sem);
+   #endif
 
     DEBUG_PRINT("writing size for %ld | 0x%lx bytes\n", f->size, f->size);
 
@@ -214,7 +253,15 @@ static void* _fios_send_thread(void* const arg)
 
         DEBUG_PRINT("waiting for ok signal for %d | 0x%x bytes\n", r, r);
         test = fios_serial_read_cmd(s, cmd);
-        assert(test);
+        // assert(test);
+
+        if (! test)
+        {
+            f->error = "serial port writing failed";
+            f->status = fios_file_status_error;
+            fprintf(stderr, "serial port writing failed!\n");
+            return _fios_thread_close();
+        }
 
         f->current += r;
     }
@@ -226,12 +273,41 @@ static void* _fios_send_thread(void* const arg)
     assert(test);
 
     DEBUG_PRINT("_fios_send_thread done\n");
-    return _fios_thread_close(f);
+    return _fios_thread_close();
+}
+
+static bool _fios_thread_sem_wait(fios_file_t* const f)
+{
+    FILE* const file = f->file;
+
+   #if defined(__APPLE__)
+    struct mach_timespec timeout = { 0 };
+    timeout.tv_sec = 1;
+
+    if (semaphore_timedwait(f->sem, timeout) == KERN_SUCCESS)
+        return true;
+   #elif defined(_WIN32)
+    if (WaitForSingleObject(f->sem, 1000) == WAIT_OBJECT_0)
+        return true;
+   #else
+    struct timespec timeout;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    ++timeout.tv_sec;
+
+    if (sem_timedwait(&f->sem, &timeout) == 0)
+        return true;
+   #endif
+
+    f->error = "serial port thread failed to start";
+    f->status = fios_file_status_error;
+    f->file = NULL;
+    fclose(file);
+    return false;
 }
 
 fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath)
 {
-    fios_file_t* const f = malloc(sizeof(fios_file_t));
+    fios_file_t* const f = calloc(1, sizeof(fios_file_t));
 
     if (f == NULL)
     {
@@ -264,6 +340,15 @@ fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath
     f->current = f->size = 0;
     f->status = fios_file_status_in_progress;
 
+   #if defined(__APPLE__)
+    f->task = mach_task_self();
+    semaphore_create(f->task, &f->sem, SYNC_POLICY_FIFO, 0);
+   #elif defined(_WIN32)
+    f->sem = CreateSemaphoreA(NULL, 0, 1, NULL);
+   #else
+    sem_init(&f->sem, 0, 0);
+   #endif
+
    #ifdef _WIN32
     f->thread = (HANDLE)_beginthreadex(NULL, 0, _fios_receive_thread, f, 0, NULL);
     if (f->thread == NULL)
@@ -272,6 +357,7 @@ fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath
                 GetLastError(), GetLastErrorString(GetLastError()));
         goto error_close;
     }
+
    #else
     if (pthread_create(&f->thread, NULL, _fios_receive_thread, f) != 0)
     {
@@ -279,6 +365,9 @@ fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath
         goto error_close;
     }
    #endif
+
+    if (! _fios_thread_sem_wait(f))
+        goto error_free;
 
     return f;
 
@@ -292,7 +381,7 @@ error_free:
 
 fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
 {
-    fios_file_t* const f = malloc(sizeof(fios_file_t));
+    fios_file_t* const f = calloc(1, sizeof(fios_file_t));
 
     if (f == NULL)
     {
@@ -335,6 +424,15 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
     f->size = size > 0 ? size : 0;
     f->status = fios_file_status_in_progress;
 
+   #if defined(__APPLE__)
+    f->task = mach_task_self();
+    semaphore_create(f->task, &f->sem, SYNC_POLICY_FIFO, 0);
+   #elif defined(_WIN32)
+    f->sem = CreateSemaphoreA(NULL, 0, 1, NULL);
+   #else
+    sem_init(&f->sem, 0, 0);
+   #endif
+
    #ifdef _WIN32
     f->thread = (HANDLE)_beginthreadex(NULL, 0, _fios_send_thread, f, 0, NULL);
     if (f->thread == NULL)
@@ -350,6 +448,9 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
         goto error_close;
     }
    #endif
+
+    if (! _fios_thread_sem_wait(f))
+        goto error_free;
 
     return f;
 
@@ -388,16 +489,20 @@ void fios_file_close(fios_file_t* const f)
     {
         f->file = NULL;
         fclose(file);
-
-       #ifdef _WIN32
-        WaitForSingleObject(f->thread, INFINITE);
-        CloseHandle(f->thread);
-       #else
-        pthread_join(f->thread, NULL);
-       #endif
     }
 
-    free(f->error);
+   #if defined(__APPLE__)
+    pthread_join(f->thread, NULL);
+    semaphore_destroy(f->task, f->sem);
+   #elif defined(_WIN32)
+    WaitForSingleObject(f->thread, INFINITE);
+    CloseHandle(f->thread);
+    CloseHandle(f->sem);
+   #else
+    pthread_join(f->thread, NULL);
+    sem_destroy(&f->sem);
+   #endif
+
     free(f);
 }
 

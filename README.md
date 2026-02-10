@@ -10,7 +10,7 @@ libfios uses cmake for building and has no other dependencies (besides a working
 
 building libfios is as simple as:
 
-```
+```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
@@ -36,7 +36,7 @@ Here is a small example on how to use this library to send a binary file.
 
 Receiver:
 
-```
+```c
 fios_serial_t* const s = fios_serial_open("/dev/ttyUSB0");
 assert(s);
 fios_file_t* const f = fios_file_receive(s, "/tmp/test.bin");
@@ -49,7 +49,7 @@ fios_serial_close(s);
 
 Sender:
 
-```
+```c
 fios_serial_t* const s = fios_serial_open("/dev/ttyUSB1");
 assert(s);
 fios_file_t* const f = fios_file_send(s, "/path/to/bin.file");

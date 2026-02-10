@@ -18,7 +18,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: build with cmake
+      - name: Build with cmake
         shell: bash
         run: |
           if [ "${{ matrix.os }}" != "windows-latest" ]; then
@@ -29,11 +29,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 18
-      - name: install node deps
+      - name: Install node deps
         shell: bash
         run: |
           ./.github/install-deps.sh
-      - name: build node addon
+      - name: Build node addon
         shell: bash
         run: |
           if [ "${{ matrix.os }}" = "macos-latest" ]; then
