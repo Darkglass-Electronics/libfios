@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: 2024 Filipe Coelho <falktx@darkglass.com>
+# SPDX-FileCopyrightText: 2024-2026 Filipe Coelho <falktx@darkglass.com>
 # SPDX-License-Identifier: ISC
 
 import os
@@ -58,6 +58,14 @@ libfios.fios_serial_open.restype  = POINTER(fios_serial_t)
 
 def fios_serial_open(devpath):
     return libfios.fios_serial_open(devpath.encode("utf-8"))
+
+# Cancel pending read or writes of a serial port, effectively closing it
+# This allows to close the serial port connection without destroying the underlying fios_serial_t object
+libfios.fios_serial_cancel.argtypes = (POINTER(fios_serial_t),)
+libfios.fios_serial_cancel.restype  = None
+
+def fios_serial_cancel(s):
+    libfios.fios_serial_cancel(s)
 
 # Close a serial port
 libfios.fios_serial_close.argtypes = (POINTER(fios_serial_t),)
