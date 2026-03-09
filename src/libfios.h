@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2024 Filipe Coelho <falktx@darkglass.com>
+// SPDX-FileCopyrightText: 2024-2026 Filipe Coelho <falktx@darkglass.com>
 // SPDX-License-Identifier: ISC
 
 #pragma once
@@ -46,6 +46,12 @@ typedef struct _fios_file_t fios_file_t;
  */
 FIOS_API
 fios_serial_t* fios_serial_open(const char* devpath);
+
+/*! Cancel pending read or writes of a serial port, effectively closing it
+ * This allows to close the serial port connection without destroying the underlying fios_serial_t object
+ */
+FIOS_API
+void fios_serial_cancel(fios_serial_t* s);
 
 /*! Close a serial port
  */
