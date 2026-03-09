@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
 #endif
 
 typedef struct {
@@ -347,16 +348,33 @@ error_free:
     return NULL;
 }
 
-void fios_serial_close(fios_serial_t* const s)
+void fios_serial_cancel(fios_serial_t* const s)
 {
     assert(s != NULL);
 
    #ifdef _WIN32
-    CloseHandle(s->h);
+    const HANDLE h = s->h;
+    if (h != INVALID_HANDLE_VALUE)
+    {
+        s->h = INVALID_HANDLE_VALUE;
+        CloseHandle(h);
+    }
    #else
-    close(s->fd);
+    const int fd = s->fd;
+    if (fd >= 0)
+    {
+        s->fd = -1;
+        ioctl(fd, TIOCSTI, "q");
+        close(fd);
+    }
    #endif
+}
 
+void fios_serial_close(fios_serial_t* const s)
+{
+    assert(s != NULL);
+
+    fios_serial_cancel(s);
     free(s->devpath);
     free(s);
 }
@@ -366,6 +384,12 @@ static bool _fios_read(fios_serial_t* const s, uint8_t* const buffer, const uint
    #ifdef _WIN32
     for (uint32_t r = 0; r < size;)
     {
+        if (s->h == INVALID_HANDLE_VALUE)
+        {
+            DEBUG_PRINT("_fios_read read cancelled");
+            return false;
+        }
+
         unsigned long r2 = 0;
         if (ReadFile(s->h, buffer + r, size - r, &r2, NULL) == FALSE)
             return false;
@@ -376,6 +400,12 @@ static bool _fios_read(fios_serial_t* const s, uint8_t* const buffer, const uint
    #else
     for (uint32_t r = 0; r < size;)
     {
+        if (s->fd < 0)
+        {
+            DEBUG_PRINT("_fios_write write cancelled");
+            return false;
+        }
+
         const int r2 = read(s->fd, buffer + r, size - r);
         DEBUG_PRINT("_fios_read got %d | %x bytes, total %d | %x bytes, size %u\n", r2, r2, r + r2, r + r2, size);
 
@@ -410,6 +440,12 @@ static bool _fios_write(fios_serial_t* const s, const uint8_t* const buffer, con
    #ifdef _WIN32
     for (unsigned long w = 0; w < size;)
     {
+        if (s->h == INVALID_HANDLE_VALUE)
+        {
+            DEBUG_PRINT("_fios_write write cancelled");
+            return false;
+        }
+
         unsigned long w2 = 0;
         if (WriteFile(s->h, buffer + w, size - w, &w2, NULL) == FALSE)
             return false;
@@ -420,8 +456,14 @@ static bool _fios_write(fios_serial_t* const s, const uint8_t* const buffer, con
    #else
     for (uint32_t w = 0; w < size;)
     {
+        if (s->fd < 0)
+        {
+            DEBUG_PRINT("_fios_write write cancelled");
+            return false;
+        }
+
         const int w2 = write(s->fd, buffer + w, size - w);
-        DEBUG_PRINT("fios_serial_write_cmd got %d | %x bytes, total %d | %x bytes, size %u\n", w2, w2, w + w2, w + w2, size);
+        DEBUG_PRINT("_fios_write got %d | %x bytes, total %d | %x bytes, size %u\n", w2, w2, w + w2, w + w2, size);
 
         if (w2 < 0)
         {
@@ -431,7 +473,7 @@ static bool _fios_write(fios_serial_t* const s, const uint8_t* const buffer, con
                 continue;
             }
 
-            perror("fios_serial_write_cmd write < 0");
+            perror("_fios_write write < 0");
             return false;
         }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: 2024 Filipe Coelho <falktx@darkglass.com>
+# SPDX-FileCopyrightText: 2024-2026 Filipe Coelho <falktx@darkglass.com>
 # SPDX-License-Identifier: ISC
 
 from .libfios import (
@@ -7,6 +7,7 @@ from .libfios import (
     MAX_FILE_SIZE,
     MAX_PAYLOAD_SIZE,
     fios_serial_open,
+    fios_serial_cancel,
     fios_serial_close,
     fios_file_send,
     fios_file_receive,

@@ -491,6 +491,8 @@ void fios_file_close(fios_file_t* const f)
         fclose(file);
     }
 
+    fios_serial_cancel(f->serial);
+
    #if defined(__APPLE__)
     pthread_join(f->thread, NULL);
     semaphore_destroy(f->task, f->sem);
