@@ -3,6 +3,10 @@
 
 #pragma once
 
+#if defined(NODE_GYP_MODULE_NAME) && !defined(DEBUG)
+#define NDEBUG
+#endif
+
 #include <assert.h>
 #include <stdio.h>
 
