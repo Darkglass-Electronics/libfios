@@ -2,13 +2,10 @@
 // SPDX-License-Identifier: ISC
 
 #include "libfios-serial.h"
+#include "utils.h"
 
-#undef NDEBUG
-#define DEBUG
-#include <assert.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 
 #ifdef _WIN32
@@ -350,7 +347,7 @@ error_free:
 
 void fios_serial_cancel(fios_serial_t* const s)
 {
-    assert(s != NULL);
+    assert_return(s != NULL,);
 
    #ifdef _WIN32
     const HANDLE h = s->h;
@@ -372,7 +369,7 @@ void fios_serial_cancel(fios_serial_t* const s)
 
 void fios_serial_close(fios_serial_t* const s)
 {
-    assert(s != NULL);
+    assert_return(s != NULL,);
 
     fios_serial_cancel(s);
     free(s->devpath);
@@ -395,7 +392,7 @@ static bool _fios_read(fios_serial_t* const s, uint8_t* const buffer, const uint
             return false;
 
         r += r2;
-        assert(r <= size);
+        assert_return(r <= size, false);
     }
    #else
     for (uint32_t r = 0; r < size;)
@@ -428,7 +425,7 @@ static bool _fios_read(fios_serial_t* const s, uint8_t* const buffer, const uint
         }
 
         r += r2;
-        assert(r <= size);
+        assert_return(r <= size, false);
     }
    #endif
 
@@ -451,7 +448,7 @@ static bool _fios_write(fios_serial_t* const s, const uint8_t* const buffer, con
             return false;
 
         w += w2;
-        assert(w <= size);
+        assert_return(w <= size, false);
     }
    #else
     for (uint32_t w = 0; w < size;)
@@ -478,7 +475,7 @@ static bool _fios_write(fios_serial_t* const s, const uint8_t* const buffer, con
         }
 
         w += w2;
-        assert(w <= size);
+        assert_return(w <= size, false);
     }
    #endif
 

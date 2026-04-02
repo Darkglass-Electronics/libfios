@@ -2,13 +2,10 @@
 // SPDX-License-Identifier: ISC
 
 #include "libfios-serial.h"
+#include "utils.h"
 
-#undef NDEBUG
-#define DEBUG
-#include <assert.h>
 #include <errno.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 
 #if defined(__APPLE__)
@@ -57,6 +54,18 @@ static void* _fios_thread_close()
    #else
     return NULL;
    #endif
+}
+
+#ifdef _WIN32
+static unsigned __stdcall _fios_thread_error(fios_file_t* const f)
+#else
+static void* _fios_thread_error(fios_file_t* const f)
+#endif
+{
+    f->error = "serial port operation failed";
+    f->status = fios_file_status_error;
+    fprintf(stderr, "serial port operation failed!\n");
+    return _fios_thread_close();
 }
 
 #ifdef _WIN32
@@ -151,7 +160,7 @@ static void* _fios_receive_thread(void* const arg)
         DEBUG_PRINT("waiting for command\n");
 
         test = fios_serial_read_cmd(s, cmd);
-        assert(test);
+        assert_return(test, _fios_thread_error(f));
 
         if (cmd[0] == 'q' && cmd[1] == 0)
             break;
@@ -171,11 +180,11 @@ static void* _fios_receive_thread(void* const arg)
 
         DEBUG_PRINT("waiting for payload of size %ld | 0x%08lx\n", size, size);
         test = fios_serial_read_payload(s, buf, size);
-        assert(test);
+        assert_return(test, _fios_thread_error(f));
 
         DEBUG_PRINT("payload received, sending ok back\n");
         test = fios_serial_write_cmd(s, "ok");
-        assert(test);
+        assert_return(test, _fios_thread_error(f));
 
         // write received buffer to file
         for (int w = 0, total = 0; total < size; total += w)
@@ -228,7 +237,7 @@ static void* _fios_send_thread(void* const arg)
     snprintf(cmd, CMD_SIZE, "s 0x%08lx", f->size);
 
     test = fios_serial_write_cmd(s, cmd);
-    assert(test);
+    assert_return(test, _fios_thread_error(f));
 
     while (f->file != NULL)
     {
@@ -245,23 +254,15 @@ static void* _fios_send_thread(void* const arg)
         snprintf(cmd, CMD_SIZE, "w 0x%08x", r);
 
         test = fios_serial_write_cmd(s, cmd);
-        assert(test);
+        assert_return(test, _fios_thread_error(f));
 
         DEBUG_PRINT("writing payload for %d | 0x%x bytes\n", r, r);
         test = fios_serial_write_payload(s, buf, r);
-        assert(test);
+        assert_return(test, _fios_thread_error(f));
 
         DEBUG_PRINT("waiting for ok signal for %d | 0x%x bytes\n", r, r);
         test = fios_serial_read_cmd(s, cmd);
-        // assert(test);
-
-        if (! test)
-        {
-            f->error = "serial port writing failed";
-            f->status = fios_file_status_error;
-            fprintf(stderr, "serial port writing failed!\n");
-            return _fios_thread_close();
-        }
+        assert_return(test, _fios_thread_error(f));
 
         f->current += r;
     }
@@ -270,7 +271,7 @@ static void* _fios_send_thread(void* const arg)
 
     DEBUG_PRINT("writing command for close\n");
     test = fios_serial_write_cmd(s, "q");
-    assert(test);
+    assert_return(test, _fios_thread_error(f));
 
     DEBUG_PRINT("_fios_send_thread done\n");
     return _fios_thread_close();
@@ -464,7 +465,7 @@ error_free:
 
 fios_file_status_t fios_file_idle(fios_file_t* const f, float* const progress)
 {
-    assert(f != NULL);
+    assert_return(f != NULL, fios_file_status_error);
 
     if (progress != NULL)
         *progress = f->size != 0 ? (double)f->current / f->size : 0.f;
@@ -474,14 +475,14 @@ fios_file_status_t fios_file_idle(fios_file_t* const f, float* const progress)
 
 float fios_file_get_progress(fios_file_t* const f)
 {
-    assert(f != NULL);
+    assert_return(f != NULL, 0.f);
 
     return f->size != 0 ? (double)f->current / f->size : 0.f;
 }
 
 void fios_file_close(fios_file_t* const f)
 {
-    assert(f != NULL);
+    assert_return(f != NULL,);
 
     FILE* const file = f->file;
 
@@ -510,7 +511,7 @@ void fios_file_close(fios_file_t* const f)
 
 const char* fios_file_get_last_error(fios_file_t* const f)
 {
-    assert(f != NULL);
+    assert_return(f != NULL, "null pointer");
 
     return f->error != NULL ? f->error : "no error";
 }
