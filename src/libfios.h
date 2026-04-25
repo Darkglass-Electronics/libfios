@@ -4,6 +4,7 @@
 #pragma once
 
 #ifdef __cplusplus
+#include <cstddef>
 extern "C" {
 #else
 #include <stdbool.h>
