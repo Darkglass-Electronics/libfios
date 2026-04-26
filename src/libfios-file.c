@@ -23,6 +23,9 @@
 #define DEBUG_PRINT(...)
 // #define DEBUG_PRINT(...) printf(__VA_ARGS__)
 
+// semi-private API
+fios_file_t* fios_file_send_stream(fios_serial_t* s, FILE* file);
+
 typedef struct _fios_file_t {
     fios_serial_t* serial;
     FILE* file;
@@ -382,14 +385,6 @@ error_free:
 
 fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
 {
-    fios_file_t* const f = calloc(1, sizeof(fios_file_t));
-
-    if (f == NULL)
-    {
-        fprintf(stderr, "fios: out of memory\n");
-        return NULL;
-    }
-
     FILE* file;
    #ifdef _WIN32
     WCHAR linpath[MAX_PATH];
@@ -404,7 +399,20 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
     if (file == NULL)
     {
         fprintf(stderr, "fios: failed to open file '%s' for reading, error %d: %s\n", inpath, errno, strerror(errno));
-        goto error_free;
+        return NULL;
+    }
+
+    return fios_file_send_stream(s, file);
+}
+
+fios_file_t* fios_file_send_stream(fios_serial_t* const s, FILE* const file)
+{
+    fios_file_t* const f = calloc(1, sizeof(fios_file_t));
+
+    if (f == NULL)
+    {
+        fprintf(stderr, "fios: out of memory\n");
+        return NULL;
     }
 
     fseek(file, 0, SEEK_END);

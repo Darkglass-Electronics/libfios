@@ -416,7 +416,7 @@ static bool _fios_read(fios_serial_t* const s, uint8_t* const buffer, const uint
         {
             if (errno == EAGAIN)
             {
-                usleep(1000);
+                usleep(10000);
                 continue;
             }
 
@@ -466,7 +466,7 @@ static bool _fios_write(fios_serial_t* const s, const uint8_t* const buffer, con
         {
             if (errno == EAGAIN)
             {
-                usleep(1000);
+                usleep(10000);
                 continue;
             }
 
