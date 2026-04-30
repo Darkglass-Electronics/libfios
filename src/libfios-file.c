@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: ISC
 
 #include "libfios-serial.h"
+#include "libfios-stream.h"
 #include "utils.h"
 
 #include <errno.h>
@@ -23,12 +24,10 @@
 #define DEBUG_PRINT(...)
 // #define DEBUG_PRINT(...) printf(__VA_ARGS__)
 
-// semi-private API
-fios_file_t* fios_file_send_stream(fios_serial_t* s, FILE* file);
-
 typedef struct _fios_file_t {
     fios_serial_t* serial;
-    FILE* file;
+    libfios_stream_functions funcs;
+    void* cookie;
     const char* error;
    #if defined(__APPLE__)
     mach_port_t task;
@@ -96,7 +95,7 @@ static void* _fios_receive_thread(void* const arg)
 
     if (! fios_serial_read_cmd(s, cmd))
     {
-        if (f->file == NULL)
+        if (f->cookie == NULL)
         {
             fprintf(stderr, "output file was closed while opening serial port!\n");
             return _fios_thread_close();
@@ -120,7 +119,7 @@ static void* _fios_receive_thread(void* const arg)
 
         if (! fios_serial_read_cmd(s, cmd))
         {
-            if (f->file == NULL)
+            if (f->cookie == NULL)
             {
                 fprintf(stderr, "output file was closed while reopening serial port!\n");
                 return _fios_thread_close();
@@ -158,7 +157,7 @@ static void* _fios_receive_thread(void* const arg)
 
     f->size = size;
 
-    while (f->file != NULL && f->status != fios_file_status_error && f->current != size)
+    while (f->cookie != NULL && f->status != fios_file_status_error && f->current != size)
     {
         DEBUG_PRINT("waiting for command\n");
 
@@ -190,11 +189,11 @@ static void* _fios_receive_thread(void* const arg)
         assert_return(test, _fios_thread_error(f));
 
         // write received buffer to file
-        for (int w = 0, total = 0; total < size; total += w)
+        for (unsigned int w = 0, total = 0; total < size; total += w)
         {
-            w = fwrite(buf + total, 1, size - total, f->file);
+            w = f->funcs.write(buf + total, 1, size - total, f->cookie);
 
-            if (w < 0)
+            if (w == 0)
             {
                 f->error = "failed to write to output file";
                 f->status = fios_file_status_error;
@@ -206,7 +205,7 @@ static void* _fios_receive_thread(void* const arg)
         f->current += size;
     }
 
-    if (f->file != NULL && f->status != fios_file_status_error && f->current == size)
+    if (f->cookie != NULL && f->status != fios_file_status_error && f->current == size)
         f->status = fios_file_status_completed;
 
     DEBUG_PRINT("_fios_receive_thread done\n");
@@ -242,13 +241,13 @@ static void* _fios_send_thread(void* const arg)
     test = fios_serial_write_cmd(s, cmd);
     assert_return(test, _fios_thread_error(f));
 
-    while (f->file != NULL)
+    while (f->cookie != NULL)
     {
-        const int r = fread(buf, 1, MAX_PAYLOAD_SIZE, f->file);
+        const unsigned int r = f->funcs.read(buf, 1, MAX_PAYLOAD_SIZE, f->cookie);
 
         DEBUG_PRINT("main file read return %d | 0x%x bytes\n", r, r);
 
-        if (r <= 0)
+        if (r == 0)
             break;
 
         DEBUG_PRINT("writing command for %d | 0x%x bytes\n", r, r);
@@ -282,7 +281,7 @@ static void* _fios_send_thread(void* const arg)
 
 static bool _fios_thread_sem_wait(fios_file_t* const f)
 {
-    FILE* const file = f->file;
+    void* const cookie = f->cookie;
 
    #if defined(__APPLE__)
     struct mach_timespec timeout = { 0 };
@@ -304,8 +303,8 @@ static bool _fios_thread_sem_wait(fios_file_t* const f)
 
     f->error = "serial port thread failed to start";
     f->status = fios_file_status_error;
-    f->file = NULL;
-    fclose(file);
+    f->cookie = NULL;
+    f->funcs.close(cookie);
     return false;
 }
 
@@ -339,7 +338,10 @@ fios_file_t* fios_file_receive(fios_serial_t* const s, const char* const outpath
     fseek(file, 0, SEEK_SET);
 
     f->serial = s;
-    f->file = file;
+    f->cookie = file;
+    f->funcs.read = NULL;
+    f->funcs.write = (libfios_stream_write*)fwrite;
+    f->funcs.close = (libfios_stream_close*)fclose;
     f->error = NULL;
     f->current = f->size = 0;
     f->status = fios_file_status_in_progress;
@@ -402,19 +404,6 @@ fios_file_t* fios_file_send(fios_serial_t* const s, const char* const inpath)
         return NULL;
     }
 
-    return fios_file_send_stream(s, file);
-}
-
-fios_file_t* fios_file_send_stream(fios_serial_t* const s, FILE* const file)
-{
-    fios_file_t* const f = calloc(1, sizeof(fios_file_t));
-
-    if (f == NULL)
-    {
-        fprintf(stderr, "fios: out of memory\n");
-        return NULL;
-    }
-
     fseek(file, 0, SEEK_END);
     const long size = ftell(file);
 
@@ -426,8 +415,34 @@ fios_file_t* fios_file_send_stream(fios_serial_t* const s, FILE* const file)
 
     fseek(file, 0, SEEK_SET);
 
+    const libfios_stream_functions funcs = {
+        .read = (libfios_stream_read*)fread,
+        .write = NULL,
+        .close = (libfios_stream_close*)fclose,
+    };
+    return fios_file_send_stream(s, size, funcs, file);
+
+error_close:
+    fclose(file);
+    return NULL;
+}
+
+fios_file_t* fios_file_send_stream(fios_serial_t* const s,
+                                   const long size,
+                                   const libfios_stream_functions funcs,
+                                   void* const cookie)
+{
+    fios_file_t* const f = calloc(1, sizeof(fios_file_t));
+
+    if (f == NULL)
+    {
+        fprintf(stderr, "fios: out of memory\n");
+        return NULL;
+    }
+
     f->serial = s;
-    f->file = file;
+    f->funcs = funcs;
+    f->cookie = cookie;
     f->error = NULL;
     f->current = 0;
     f->size = size > 0 ? size : 0;
@@ -464,7 +479,7 @@ fios_file_t* fios_file_send_stream(fios_serial_t* const s, FILE* const file)
     return f;
 
 error_close:
-    fclose(file);
+    funcs.close(cookie);
 
 error_free:
     free(f);
@@ -492,12 +507,12 @@ void fios_file_close(fios_file_t* const f)
 {
     assert_return(f != NULL,);
 
-    FILE* const file = f->file;
+    void* const cookie = f->cookie;
 
-    if (file != NULL)
+    if (cookie != NULL)
     {
-        f->file = NULL;
-        fclose(file);
+        f->cookie = NULL;
+        f->funcs.close(cookie);
     }
 
     fios_serial_cancel(f->serial);
