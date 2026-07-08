@@ -33,7 +33,8 @@ extern "C" {
 
 /*! maximum payload size, used to receive data after a command
  */
-#define MAX_PAYLOAD_SIZE 0x2000
+#define MAX_PAYLOAD_SIZE_RECV 0x2000
+#define MAX_PAYLOAD_SIZE_SEND 0x300
 
 /*! opaque API structures
  */
