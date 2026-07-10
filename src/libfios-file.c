@@ -157,6 +157,7 @@ static void* _fios_receive_thread(void* const arg)
 
     f->size = size;
 
+    bool quitReceived = false;
     while (f->cookie != NULL && f->status != fios_file_status_error && f->current != size)
     {
         DEBUG_PRINT("waiting for command\n");
@@ -165,7 +166,10 @@ static void* _fios_receive_thread(void* const arg)
         assert_return(test, _fios_thread_error(f));
 
         if (cmd[0] == 'q' && cmd[1] == 0)
+        {
+            quitReceived = true;
             break;
+        }
 
         if (cmd[0] != 'w' || cmd[1] != ' ')
         {
@@ -206,7 +210,22 @@ static void* _fios_receive_thread(void* const arg)
     }
 
     if (f->cookie != NULL && f->status != fios_file_status_error && f->current == size)
+    {
         f->status = fios_file_status_completed;
+
+        if (! quitReceived)
+        {
+            test = fios_serial_read_cmd(s, cmd);
+            assert_return(test, _fios_thread_error(f));
+
+            if (cmd[0] != 'q' || cmd[1] != 0)
+            {
+                f->error = "unexpected data received (invalid quit command)";
+                f->status = fios_file_status_error;
+                fprintf(stderr, "error invalid quit command %02x:'%c' %02x:'%c'\n", cmd[0], cmd[0], cmd[1], cmd[1]);
+            }
+        }
+    }
 
     DEBUG_PRINT("_fios_receive_thread done\n");
     return _fios_thread_close();
