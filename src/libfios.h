@@ -31,9 +31,17 @@ extern "C" {
  */
 #define MAX_FILE_SIZE 0x7fffffff
 
-/*! maximum payload size, used to receive data after a command
+/*! maximum payload size, used to receive or send data after a command
  */
 #define MAX_PAYLOAD_SIZE 0x2000
+
+#ifndef MAX_PAYLOAD_SIZE_RECV
+#define MAX_PAYLOAD_SIZE_RECV MAX_PAYLOAD_SIZE
+#endif
+
+#ifndef MAX_PAYLOAD_SIZE_SEND
+#define MAX_PAYLOAD_SIZE_SEND MAX_PAYLOAD_SIZE
+#endif
 
 /*! opaque API structures
  */

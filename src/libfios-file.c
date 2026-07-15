@@ -79,7 +79,7 @@ static void* _fios_receive_thread(void* const arg)
     fios_file_t* const f = arg;
     fios_serial_t* const s = f->serial;
 
-    char buf[MAX_PAYLOAD_SIZE];
+    char buf[MAX_PAYLOAD_SIZE_RECV];
     char cmd[CMD_SIZE];
     bool test;
 
@@ -240,7 +240,7 @@ static void* _fios_send_thread(void* const arg)
     fios_file_t* const f = arg;
     fios_serial_t* const s = f->serial;
 
-    char buf[MAX_PAYLOAD_SIZE];
+    char buf[MAX_PAYLOAD_SIZE_SEND];
     char cmd[CMD_SIZE];
     bool test;
 
